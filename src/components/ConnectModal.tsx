@@ -1,45 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, Loader2, Smartphone, X, AlertTriangle } from 'lucide-react'
-import { getSocket, fetchStatus, type WaState } from '../utils/api'
+import { Check, Loader2, Smartphone, X } from 'lucide-react'
+import { useStore } from '../store/useStore'
 
-export default function ConnectModal({ onClose }: { onClose: () => void }) {
-  const [wa, setWa] = useState<WaState | null>(null)
-  const [backendDown, setBackendDown] = useState(false)
+/** QR modal for connecting one specific chip (WhatsApp session). */
+export default function ConnectModal({
+  sessionId,
+  onClose,
+}: {
+  sessionId: string
+  onClose: () => void
+}) {
+  const session = useStore((s) => s.sessions.find((x) => x.id === sessionId))
+  const status = session?.status ?? 'starting'
 
   useEffect(() => {
-    let closed = false
-
-    // Initial fetch (in case we're already connected/qr).
-    fetchStatus().then((s) => {
-      if (closed) return
-      if (s) setWa(s)
-      else setBackendDown(true)
-    })
-
-    const socket = getSocket()
-    const onState = (s: WaState) => {
-      setBackendDown(false)
-      setWa(s)
-      if (s.status === 'connected') {
-        // brief success flash, then close
-        setTimeout(() => !closed && onClose(), 1200)
-      }
+    if (status === 'connected') {
+      const t = setTimeout(onClose, 1200)
+      return () => clearTimeout(t)
     }
-    const onConnectError = () => setBackendDown(true)
-
-    socket.on('state', onState)
-    socket.on('connect_error', onConnectError)
-    socket.io.on('error', onConnectError)
-
-    return () => {
-      closed = true
-      socket.off('state', onState)
-      socket.off('connect_error', onConnectError)
-    }
-  }, [onClose])
-
-  const status = wa?.status ?? 'disconnected'
+  }, [status, onClose])
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
@@ -47,7 +27,10 @@ export default function ConnectModal({ onClose }: { onClose: () => void }) {
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <img src="/logo-icon.png" alt="Unique" className="h-8 w-8 object-contain" />
-            <h3 className="text-lg font-bold">Conectar WhatsApp</h3>
+            <div>
+              <h3 className="text-lg font-bold leading-none">Conectar chip</h3>
+              <p className="text-xs text-ink/50">{session?.name ?? '—'}</p>
+            </div>
           </div>
           <button onClick={onClose} className="text-ink/50 transition hover:text-ink">
             <X size={20} />
@@ -56,27 +39,16 @@ export default function ConnectModal({ onClose }: { onClose: () => void }) {
 
         <div className="flex flex-col items-center">
           <div className="relative flex h-[320px] w-[320px] items-center justify-center rounded-lg bg-white">
-            {backendDown ? (
-              <div className="px-6 text-center text-bg">
-                <AlertTriangle size={40} className="mx-auto mb-2 text-amber-500" />
-                <p className="font-semibold">Backend offline</p>
-                <p className="mt-1 text-xs text-gray-600">
-                  Inicie o servidor com <code className="rounded bg-gray-200 px-1">npm run server</code> e
-                  reabra este modal.
-                </p>
-              </div>
-            ) : status === 'connected' ? (
+            {status === 'connected' ? (
               <div className="flex flex-col items-center text-bg">
                 <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent">
                   <Check size={48} className="text-white" />
                 </div>
                 <p className="mt-3 font-bold">Conectado!</p>
-                {wa?.me?.pushname && (
-                  <p className="text-sm text-gray-600">{wa.me.pushname}</p>
-                )}
+                {session?.me?.pushname && <p className="text-sm text-gray-600">{session.me.pushname}</p>}
               </div>
-            ) : wa?.qr ? (
-              <img src={wa.qr} alt="QR Code do WhatsApp" className="h-[300px] w-[300px]" />
+            ) : session?.qr ? (
+              <img src={session.qr} alt="QR Code do WhatsApp" className="h-[300px] w-[300px]" />
             ) : (
               <div className="flex flex-col items-center text-bg">
                 <Loader2 size={40} className="animate-spin text-accent" />
@@ -89,14 +61,12 @@ export default function ConnectModal({ onClose }: { onClose: () => void }) {
 
           <p className="mt-5 flex items-center gap-2 text-sm font-medium text-ink">
             <Smartphone size={16} className="text-accent" />
-            {status === 'connected'
-              ? 'Tudo pronto para disparar.'
-              : 'Escaneie o código com seu celular'}
+            {status === 'connected' ? 'Chip pronto para disparar.' : 'Escaneie o código com seu celular'}
           </p>
           <ol className="mt-3 w-full space-y-1 rounded-lg border border-border bg-bg p-3 text-xs leading-relaxed text-ink/60">
-            <li>1. Abra o <b className="text-ink/80">WhatsApp</b> no seu celular</li>
-            <li>2. Toque em <b className="text-ink/80">Mais opções (⋮)</b> → <b className="text-ink/80">Dispositivos conectados</b></li>
-            <li>3. Toque em <b className="text-ink/80">Conectar dispositivo</b> e aponte para esta tela</li>
+            <li>1. Abra o <b className="text-ink/80">WhatsApp</b> do número desejado</li>
+            <li>2. <b className="text-ink/80">Mais opções (⋮)</b> → <b className="text-ink/80">Dispositivos conectados</b></li>
+            <li>3. <b className="text-ink/80">Conectar dispositivo</b> e aponte para esta tela</li>
           </ol>
         </div>
       </div>

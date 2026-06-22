@@ -38,6 +38,10 @@ function CountdownRing({ progress, mm, ss }: { progress: number; mm: string; ss:
 
 export default function Disparo() {
   const connected = useStore((s) => s.connected)
+  const sessions = useStore((s) => s.sessions)
+  const dispatchChips = useStore((s) => s.dispatchChips)
+  const toggleDispatchChip = useStore((s) => s.toggleDispatchChip)
+  const chipCursor = useStore((s) => s.chipCursor)
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
   const dispatch = useStore((s) => s.dispatch)
@@ -51,6 +55,12 @@ export default function Disparo() {
   const queuePos = useStore((s) => s.queuePos)
   const contacts = useStore((s) => s.contacts)
   const templates = useStore((s) => s.templates)
+
+  const connectedChips = sessions.filter((s) => s.status === 'connected')
+  const pool = connectedChips.filter(
+    (c) => dispatchChips.length === 0 || dispatchChips.includes(c.id),
+  )
+  const nextChip = pool.length ? pool[chipCursor % pool.length] : null
 
   const [, force] = useState(0)
   useEffect(() => {
@@ -82,9 +92,52 @@ export default function Disparo() {
 
       {!connected && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          ⚠️ WhatsApp desconectado. Conecte no topo da página para liberar os controles.
+          ⚠️ Nenhum chip conectado. Vá em <b>Conexões</b> para conectar ao menos um WhatsApp.
         </div>
       )}
+
+      {/* Chip selection (round-robin pool) */}
+      <div className="rounded-card border border-border bg-card p-5">
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className="font-semibold">Chips no revezamento (round-robin)</h3>
+          <span className="text-xs text-ink/50">{pool.length} ativo(s)</span>
+        </div>
+        <p className="mb-3 text-xs text-ink/50">
+          Cada envio sai de um chip diferente, em ordem. Desmarque um chip para tirá-lo do rodízio.
+        </p>
+        {connectedChips.length === 0 ? (
+          <p className="text-sm text-ink/40">Nenhum chip conectado.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {connectedChips.map((c) => {
+              const on = dispatchChips.length === 0 || dispatchChips.includes(c.id)
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    // First click while "all" is implicit: materialize the explicit list, then toggle.
+                    if (dispatchChips.length === 0) {
+                      connectedChips.forEach((x) => {
+                        if (x.id !== c.id) toggleDispatchChip(x.id)
+                      })
+                    } else {
+                      toggleDispatchChip(c.id)
+                    }
+                  }}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                    on
+                      ? 'border-accent bg-accent/10 text-accent'
+                      : 'border-border bg-bg text-ink/40'
+                  }`}
+                >
+                  <span>📱 {c.name}</span>
+                  <span className="text-xs">{on ? '✓' : '—'}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Settings */}
@@ -207,6 +260,10 @@ export default function Disparo() {
               <div className="text-sm">
                 <div className="text-ink/50">Próximo envio para</div>
                 <div className="font-bold">{nextContact?.nome ?? '—'}</div>
+              </div>
+              <div className="ml-auto text-right text-sm">
+                <div className="text-ink/50">via chip</div>
+                <div className="font-bold text-accent">📱 {nextChip?.name ?? '—'}</div>
               </div>
             </div>
           </div>

@@ -23,7 +23,15 @@ import {
   templateForPosition,
   uid,
 } from '../utils/helpers'
-import { sendMessage } from '../utils/api'
+import { sendMessage, type ChipSession } from '../utils/api'
+import { LOGIN_USER, LOGIN_PASS } from '../config'
+
+/** Chips habilitados e conectados, na ordem do round-robin. */
+function dispatchPool(sessions: ChipSession[], dispatchChips: string[]): ChipSession[] {
+  const connected = sessions.filter((s) => s.status === 'connected')
+  if (!dispatchChips.length) return connected
+  return connected.filter((s) => dispatchChips.includes(s.id))
+}
 
 const DEFAULT_TEMPLATES: Template[] = [
   {
@@ -58,8 +66,14 @@ const EXAMPLE_CONTACTS: Contact[] = [
 ]
 
 interface State {
+  authed: boolean
+  login: (user: string, pass: string) => boolean
+  logout: () => void
   page: Page
-  connected: boolean
+  connected: boolean // derivado: existe ao menos 1 chip conectado
+  sessions: ChipSession[] // chips sincronizados do backend
+  dispatchChips: string[] // ids dos chips habilitados p/ disparo (vazio = todos conectados)
+  chipCursor: number // posição do round-robin
   contacts: Contact[]
   selected: string[]
   templates: Template[]
@@ -75,7 +89,8 @@ interface State {
   showCompletion: boolean
 
   setPage: (p: Page) => void
-  setConnected: (b: boolean) => void
+  setSessions: (sessions: ChipSession[]) => void
+  toggleDispatchChip: (id: string) => void
 
   importContacts: (rows: { nome: string; telefone: string }[]) => number
   addContact: (nome: string, telefone: string) => boolean
@@ -104,8 +119,19 @@ function pushLog(log: LogLine[], line: Omit<LogLine, 'id' | 'time'>): LogLine[] 
 export const useStore = create<State>()(
   persist(
     (set, get) => ({
+      authed: false,
+      login: (user, pass) => {
+        const ok =
+          user.trim().toLowerCase() === LOGIN_USER.toLowerCase() && pass === LOGIN_PASS
+        if (ok) set({ authed: true })
+        return ok
+      },
+      logout: () => set({ authed: false }),
       page: 'dashboard',
       connected: false,
+      sessions: [],
+      dispatchChips: [],
+      chipCursor: 0,
       contacts: EXAMPLE_CONTACTS,
       selected: [],
       templates: DEFAULT_TEMPLATES,
@@ -122,20 +148,30 @@ export const useStore = create<State>()(
 
       setPage: (p) => set({ page: p }),
 
-      setConnected: (b) => {
-        if (get().connected === b) return
-        set({ connected: b })
-        // If WhatsApp drops while running, pause the dispatch.
-        if (!b && get().dispatch === 'running') {
+      setSessions: (sessions) => {
+        const anyConnected = sessions.some((s) => s.status === 'connected')
+        // Drop ids that no longer exist from the enabled list.
+        const ids = new Set(sessions.map((s) => s.id))
+        const dispatchChips = get().dispatchChips.filter((id) => ids.has(id))
+        set({ sessions, connected: anyConnected, dispatchChips })
+        // If every chip dropped while running, pause.
+        if (!anyConnected && get().dispatch === 'running') {
           set({
             dispatch: 'paused',
             nextSendAt: null,
             log: pushLog(get().log, {
               kind: 'error',
-              text: '🔌 WhatsApp desconectado — disparo pausado.',
+              text: '🔌 Todos os chips desconectaram — disparo pausado.',
             }),
           })
         }
+      },
+
+      toggleDispatchChip: (id) => {
+        const cur = get().dispatchChips
+        set({
+          dispatchChips: cur.includes(id) ? cur.filter((c) => c !== id) : [...cur, id],
+        })
       },
 
       importContacts: (rows) => {
@@ -242,15 +278,17 @@ export const useStore = create<State>()(
           }
         }
         const iv = randomIntervalMs(settings.intervalMin, settings.intervalMax)
+        const pool = dispatchPool(get().sessions, get().dispatchChips)
         set({
           dispatch: 'running',
           queue: pending,
           queuePos: 0,
+          chipCursor: 0,
           nextSendAt: Date.now() + iv,
           currentIntervalMs: iv,
           log: pushLog(get().log, {
             kind: 'info',
-            text: `🚀 Campanha iniciada — ${pending.length} contato(s). Intervalo variável de ${settings.intervalMin}–${settings.intervalMax} min. Próximo em ${msToClock(iv)}.`,
+            text: `🚀 Campanha iniciada — ${pending.length} contato(s). Revezando ${pool.length} chip(s), intervalo ${settings.intervalMin}–${settings.intervalMax} min. Próximo em ${msToClock(iv)}.`,
           }),
         })
       },
@@ -299,6 +337,23 @@ export const useStore = create<State>()(
           return
         }
 
+        // Round-robin: pick the next chip among enabled+connected ones.
+        const pool = dispatchPool(s.sessions, s.dispatchChips)
+        if (!pool.length) {
+          set({
+            dispatch: 'paused',
+            sending: false,
+            nextSendAt: null,
+            log: pushLog(s.log, {
+              kind: 'error',
+              text: '⚠️ Nenhum chip conectado/habilitado — disparo pausado.',
+            }),
+          })
+          return
+        }
+        const chip = pool[s.chipCursor % pool.length]
+        const nextCursor = s.chipCursor + 1
+
         const tIdx = templateForPosition(queuePos, templates)
         const tmpl = templates.find((t) => t.id === tIdx) ?? templates[0]
         const tLabel = `Template ${tIdx + 1}`
@@ -308,20 +363,23 @@ export const useStore = create<State>()(
         // Lock so the 1s ticker doesn't fire again while the request is in flight.
         set({
           sending: true,
+          chipCursor: nextCursor,
           nextSendAt: null,
           log: pushLog(s.log, {
             kind: 'info',
-            text: `📤 Enviando ${tLabel} → ${contact.nome} (${contact.telefone})…`,
+            text: `📤 Enviando ${tLabel} via 📱${chip.name} → ${contact.nome} (${contact.telefone})…`,
           }),
         })
 
         const res = await sendMessage({
+          sessionId: chip.id,
           phone: contact.telefone,
           message: msg,
           imageBase64: tmpl.image,
           caption,
         })
 
+        const chipName = res.chip || chip.name
         const cur = get()
         const success = res.ok
         const newStatus: ContactStatus = success ? 'sent' : 'error'
@@ -338,18 +396,19 @@ export const useStore = create<State>()(
           template: tIdx,
           status: success ? 'sent' : 'error',
           preview: msg.slice(0, 120),
+          chip: chipName,
         }
 
         let log = cur.log
         if (success) {
           log = pushLog(log, {
             kind: 'success',
-            text: `✅ ${tLabel} → ${contact.nome} (${contact.telefone})`,
+            text: `✅ ${tLabel} via 📱${chipName} → ${contact.nome} (${contact.telefone})`,
           })
         } else {
           log = pushLog(log, {
             kind: 'error',
-            text: `❌ Falha ao enviar para ${contact.nome} — ${res.error ?? 'erro desconhecido'}`,
+            text: `❌ Falha via 📱${chipName} → ${contact.nome} — ${res.error ?? 'erro desconhecido'}`,
           })
         }
 
@@ -410,8 +469,9 @@ export const useStore = create<State>()(
         }
         state.showCompletion = false
         state.sending = false
-        // Connection is owned by the backend — re-sync on load, never trust storage.
+        // Connection/chips are owned by the backend — re-sync on load, never trust storage.
         state.connected = false
+        state.sessions = []
         // Migrate older saved state that had no variable-interval fields.
         if (state.settings && typeof state.settings.intervalMax !== 'number') {
           const base = typeof state.settings.intervalMin === 'number' ? state.settings.intervalMin : 8

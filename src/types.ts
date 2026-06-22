@@ -42,6 +42,7 @@ export interface HistoryEntry {
   template: number // 0..2
   status: 'sent' | 'error'
   preview: string
+  chip?: string // nome do chip que enviou
 }
 
-export type Page = 'dashboard' | 'contacts' | 'templates' | 'disparo' | 'historico'
+export type Page = 'dashboard' | 'contacts' | 'templates' | 'disparo' | 'historico' | 'conexoes'

@@ -1,11 +1,11 @@
-import { useState } from 'react'
-import { Wifi, WifiOff } from 'lucide-react'
+import { Smartphone, WifiOff, LogOut } from 'lucide-react'
 import { useStore } from '../store/useStore'
-import ConnectModal from './ConnectModal'
 
 export default function Header() {
-  const connected = useStore((s) => s.connected)
-  const [showModal, setShowModal] = useState(false)
+  const sessions = useStore((s) => s.sessions)
+  const setPage = useStore((s) => s.setPage)
+  const logout = useStore((s) => s.logout)
+  const connectedCount = sessions.filter((s) => s.status === 'connected').length
 
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-card/80 px-6 backdrop-blur">
@@ -20,32 +20,36 @@ export default function Header() {
       </div>
 
       <div className="flex items-center gap-3">
-        {connected ? (
+        {connectedCount > 0 ? (
           <span className="flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
             </span>
-            Conectado
+            {connectedCount} chip{connectedCount > 1 ? 's' : ''} conectado{connectedCount > 1 ? 's' : ''}
           </span>
         ) : (
           <span className="flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400">
             <WifiOff size={12} />
-            Desconectado
+            Nenhum chip conectado
           </span>
         )}
 
-        {!connected && (
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-black transition hover:brightness-110"
-          >
-            <Wifi size={16} /> Conectar WhatsApp
-          </button>
-        )}
-      </div>
+        <button
+          onClick={() => setPage('conexoes')}
+          className="flex items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-black transition hover:brightness-110"
+        >
+          <Smartphone size={16} /> Gerenciar chips
+        </button>
 
-      {showModal && <ConnectModal onClose={() => setShowModal(false)} />}
+        <button
+          onClick={logout}
+          title="Sair"
+          className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink/70 transition hover:border-ink/30 hover:text-ink"
+        >
+          <LogOut size={16} />
+        </button>
+      </div>
     </header>
   )
 }

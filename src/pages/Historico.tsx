@@ -37,6 +37,7 @@ export default function Historico() {
       nome: h.nome,
       telefone: h.telefone,
       template: `T${h.template + 1}`,
+      chip: h.chip ?? '',
       status: h.status === 'sent' ? 'Enviado' : 'Erro',
       mensagem: h.preview,
     }))
@@ -90,6 +91,7 @@ export default function Historico() {
               <th className="p-3">Nome</th>
               <th className="p-3">Telefone</th>
               <th className="p-3">Template</th>
+              <th className="p-3">Chip</th>
               <th className="p-3">Status</th>
               <th className="p-3">Prévia</th>
             </tr>
@@ -97,7 +99,7 @@ export default function Historico() {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-ink/40">
+                <td colSpan={7} className="p-8 text-center text-ink/40">
                   Nenhum registro para este filtro.
                 </td>
               </tr>
@@ -115,6 +117,7 @@ export default function Historico() {
                     T{h.template + 1}
                   </span>
                 </td>
+                <td className="p-3 text-xs text-ink/70">{h.chip ? `📱 ${h.chip}` : '—'}</td>
                 <td className="p-3">
                   <span
                     className={`rounded-full px-2 py-1 text-xs font-semibold ${

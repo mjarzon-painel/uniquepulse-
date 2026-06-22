@@ -7,14 +7,17 @@ import Contacts from './pages/Contacts'
 import Templates from './pages/Templates'
 import Disparo from './pages/Disparo'
 import Historico from './pages/Historico'
+import Conexoes from './pages/Conexoes'
+import Login from './pages/Login'
 import { useStore } from './store/useStore'
-import { getSocket, fetchStatus, type WaState } from './utils/api'
+import { getSocket, fetchSessions, type ChipSession } from './utils/api'
 
 export default function App() {
+  const authed = useStore((s) => s.authed)
   const page = useStore((s) => s.page)
   const tick = useStore((s) => s.tick)
   const showCompletion = useStore((s) => s.showCompletion)
-  const setConnected = useStore((s) => s.setConnected)
+  const setSessions = useStore((s) => s.setSessions)
 
   // Single global 1s ticker drives the dispatch timer.
   useEffect(() => {
@@ -22,16 +25,18 @@ export default function App() {
     return () => clearInterval(id)
   }, [tick])
 
-  // Keep connection status in sync with the backend (real WhatsApp).
+  // Keep the chips (WhatsApp sessions) in sync with the backend.
   useEffect(() => {
-    fetchStatus().then((s) => s && setConnected(s.status === 'connected'))
+    fetchSessions().then((list) => list && setSessions(list))
     const socket = getSocket()
-    const onState = (s: WaState) => setConnected(s.status === 'connected')
-    socket.on('state', onState)
+    const onSessions = (list: ChipSession[]) => setSessions(list)
+    socket.on('sessions', onSessions)
     return () => {
-      socket.off('state', onState)
+      socket.off('sessions', onSessions)
     }
-  }, [setConnected])
+  }, [setSessions])
+
+  if (!authed) return <Login />
 
   return (
     <div className="flex h-screen flex-col">
@@ -44,6 +49,7 @@ export default function App() {
           {page === 'templates' && <Templates />}
           {page === 'disparo' && <Disparo />}
           {page === 'historico' && <Historico />}
+          {page === 'conexoes' && <Conexoes />}
         </main>
       </div>
       {showCompletion && <CompletionModal />}
