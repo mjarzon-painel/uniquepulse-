@@ -1,15 +1,7 @@
-import { useEffect, useState } from 'react'
-import { Plus, Smartphone, Trash2, QrCode, Loader2, CheckCircle2, WifiOff, Server, Save } from 'lucide-react'
+import { useState } from 'react'
+import { Plus, Smartphone, Trash2, QrCode, Loader2, CheckCircle2, WifiOff } from 'lucide-react'
 import { useStore } from '../store/useStore'
-import {
-  addSession,
-  logoutSession,
-  reconnectSession,
-  getBackendConfig,
-  setBackendConfig,
-  pingBackend,
-  type WaStatus,
-} from '../utils/api'
+import { addSession, logoutSession, reconnectSession, type WaStatus } from '../utils/api'
 import ConnectModal from '../components/ConnectModal'
 
 const STATUS_INFO: Record<WaStatus, { label: string; cls: string }> = {
@@ -24,32 +16,6 @@ export default function Conexoes() {
   const sessions = useStore((s) => s.sessions)
   const [openId, setOpenId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-
-  const cfg = getBackendConfig()
-  const [beUrl, setBeUrl] = useState(cfg.url)
-  const [beToken, setBeToken] = useState(cfg.token)
-  const [ping, setPing] = useState<'checking' | 'ok' | 'unauthorized' | 'offline'>('checking')
-
-  useEffect(() => {
-    pingBackend().then(setPing)
-  }, [])
-
-  function saveBackend() {
-    const changed = setBackendConfig(beUrl, beToken)
-    if (changed) {
-      location.reload() // reinicia socket/sessões com a nova config
-    } else {
-      setPing('checking')
-      pingBackend().then(setPing)
-    }
-  }
-
-  const pingInfo = {
-    checking: { label: 'Verificando…', cls: 'text-ink/50' },
-    ok: { label: '● Conectado ao backend', cls: 'text-accent' },
-    unauthorized: { label: '● Token inválido', cls: 'text-red-400' },
-    offline: { label: '● Backend inacessível', cls: 'text-red-400' },
-  }[ping]
 
   async function handleAdd() {
     setBusy(true)
@@ -89,48 +55,6 @@ export default function Conexoes() {
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
           Adicionar chip
         </button>
-      </div>
-
-      {/* Backend (servidor) config */}
-      <div className="rounded-card border border-border bg-card p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 font-semibold">
-            <Server size={16} className="text-accent" /> Servidor (backend)
-          </h3>
-          <span className={`text-xs font-semibold ${pingInfo.cls}`}>{pingInfo.label}</span>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]">
-          <div>
-            <label className="mb-1 block text-xs text-ink/50">Endereço do backend</label>
-            <input
-              value={beUrl}
-              onChange={(e) => setBeUrl(e.target.value)}
-              placeholder="https://seu-tunel.trycloudflare.com"
-              className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none transition focus:border-accent"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-ink/50">Token de acesso</label>
-            <input
-              value={beToken}
-              onChange={(e) => setBeToken(e.target.value)}
-              placeholder="chave secreta do backend"
-              className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none transition focus:border-accent"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={saveBackend}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-black transition hover:brightness-110 sm:w-auto"
-            >
-              <Save size={15} /> Salvar
-            </button>
-          </div>
-        </div>
-        <p className="mt-2 text-xs text-ink/40">
-          Deixe em branco (ou <code>http://localhost:3001</code>) para usar o backend no próprio PC.
-          Para acessar de qualquer lugar, cole a URL pública do seu túnel + o token.
-        </p>
       </div>
 
       <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm">

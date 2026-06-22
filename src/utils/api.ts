@@ -1,41 +1,14 @@
 import { io, type Socket } from 'socket.io-client'
 
-// ---- Backend configuration (runtime, stored in localStorage) ----
-// The deployed frontend has no baked-in backend address or secret.
-// The user configures the public backend URL + access token in the app,
-// so nothing sensitive lives in the public bundle.
-const URL_KEY = 'wa_backend_url'
-const TOKEN_KEY = 'wa_backend_token'
-
+// Backend (whatsapp-web.js) base URL. Defaults to localhost.
+// Em produção, defina VITE_API_URL para o endereço público do backend.
 export function getApiUrl(): string {
-  const saved = localStorage.getItem(URL_KEY)
   const envUrl = import.meta.env.VITE_API_URL as string | undefined
-  return (saved || envUrl || 'http://localhost:3001').replace(/\/$/, '')
-}
-
-export function getToken(): string {
-  return localStorage.getItem(TOKEN_KEY) || ''
-}
-
-export function getBackendConfig() {
-  return { url: getApiUrl(), token: getToken() }
-}
-
-/** Persist backend URL + token. Returns true if anything changed. */
-export function setBackendConfig(url: string, token: string): boolean {
-  const changed = getApiUrl() !== url.replace(/\/$/, '') || getToken() !== token
-  if (url.trim()) localStorage.setItem(URL_KEY, url.trim().replace(/\/$/, ''))
-  else localStorage.removeItem(URL_KEY)
-  if (token.trim()) localStorage.setItem(TOKEN_KEY, token.trim())
-  else localStorage.removeItem(TOKEN_KEY)
-  return changed
+  return (envUrl || 'http://localhost:3001').replace(/\/$/, '')
 }
 
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  const h: Record<string, string> = { ...extra }
-  const t = getToken()
-  if (t) h['x-wa-token'] = t
-  return h
+  return { ...extra }
 }
 
 export type WaStatus = 'starting' | 'disconnected' | 'qr' | 'authenticated' | 'connected'
@@ -52,10 +25,7 @@ let socket: Socket | null = null
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io(getApiUrl(), {
-      transports: ['websocket', 'polling'],
-      auth: { token: getToken() },
-    })
+    socket = io(getApiUrl(), { transports: ['websocket', 'polling'] })
   }
   return socket
 }
@@ -67,17 +37,6 @@ export async function fetchSessions(): Promise<ChipSession[] | null> {
     return (await r.json()) as ChipSession[]
   } catch {
     return null
-  }
-}
-
-/** Lightweight reachability + auth check. */
-export async function pingBackend(): Promise<'ok' | 'unauthorized' | 'offline'> {
-  try {
-    const r = await fetch(`${getApiUrl()}/api/sessions`, { headers: authHeaders() })
-    if (r.status === 401) return 'unauthorized'
-    return r.ok ? 'ok' : 'offline'
-  } catch {
-    return 'offline'
   }
 }
 
