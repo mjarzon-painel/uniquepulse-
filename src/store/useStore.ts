@@ -464,25 +464,37 @@ export const useStore = create<State>()(
     }),
     {
       name: 'wa-blast-store',
+      version: 2,
       onRehydrateStorage: () => (state) => {
         if (!state) return
-        // If a dispatch was running, come back paused (spec).
-        if (state.dispatch === 'running') {
-          state.dispatch = 'paused'
-          state.nextSendAt = null
+        try {
+          // If a dispatch was running, come back paused (spec).
+          if (state.dispatch === 'running') {
+            state.dispatch = 'paused'
+            state.nextSendAt = null
+          }
+          state.showCompletion = false
+          state.sending = false
+          // Connection/chips are owned by the backend — re-sync on load, never trust storage.
+          state.connected = false
+          state.sessions = []
+          // Defaults for fields that may be missing in older saved state.
+          if (!Array.isArray(state.dispatchChips)) state.dispatchChips = []
+          if (typeof state.chipCursor !== 'number') state.chipCursor = 0
+          if (typeof state.currentIntervalMs !== 'number') state.currentIntervalMs = 0
+          if (!state.settings || typeof state.settings !== 'object') {
+            state.settings = { intervalMin: 8, intervalMax: 15, businessHours: false, order: 'sequential' }
+          } else if (typeof state.settings.intervalMax !== 'number') {
+            const base = typeof state.settings.intervalMin === 'number' ? state.settings.intervalMin : 8
+            state.settings.intervalMin = base
+            state.settings.intervalMax = Math.max(base + 5, base)
+          }
+          if (!Array.isArray(state.contacts)) state.contacts = []
+          if (!Array.isArray(state.history)) state.history = []
+          if (!Array.isArray(state.log)) state.log = []
+        } catch (e) {
+          console.error('Falha ao migrar estado salvo:', e)
         }
-        state.showCompletion = false
-        state.sending = false
-        // Connection/chips are owned by the backend — re-sync on load, never trust storage.
-        state.connected = false
-        state.sessions = []
-        // Migrate older saved state that had no variable-interval fields.
-        if (state.settings && typeof state.settings.intervalMax !== 'number') {
-          const base = typeof state.settings.intervalMin === 'number' ? state.settings.intervalMin : 8
-          state.settings.intervalMin = base
-          state.settings.intervalMax = Math.max(base + 5, base)
-        }
-        if (typeof state.currentIntervalMs !== 'number') state.currentIntervalMs = 0
       },
     },
   ),
