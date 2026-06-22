@@ -38,7 +38,7 @@ export default function ConnectModal({
         </div>
 
         <div className="flex flex-col items-center">
-          <div className="relative flex h-[320px] w-[320px] items-center justify-center rounded-lg bg-white">
+          <div className="relative mx-auto flex aspect-square w-full max-w-[300px] items-center justify-center rounded-lg bg-white">
             {status === 'connected' ? (
               <div className="flex flex-col items-center text-bg">
                 <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent">
@@ -48,7 +48,7 @@ export default function ConnectModal({
                 {session?.me?.pushname && <p className="text-sm text-gray-600">{session.me.pushname}</p>}
               </div>
             ) : session?.qr ? (
-              <img src={session.qr} alt="QR Code do WhatsApp" className="h-[300px] w-[300px]" />
+              <img src={session.qr} alt="QR Code do WhatsApp" className="h-full w-full object-contain p-2" />
             ) : (
               <div className="flex flex-col items-center text-bg">
                 <Loader2 size={40} className="animate-spin text-accent" />

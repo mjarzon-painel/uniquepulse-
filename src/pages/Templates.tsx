@@ -38,7 +38,7 @@ export default function Templates() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {templates.map((tp, i) => (
           <button
             key={tp.id}

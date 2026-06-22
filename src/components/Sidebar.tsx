@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, FileText, Send, History, Smartphone } from 'lucide-react'
+import { LayoutDashboard, Users, FileText, Send, History, Smartphone, X } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import type { Page } from '../types'
 import { isFilled } from '../utils/helpers'
@@ -12,7 +12,7 @@ const ITEMS: { id: Page; label: string; icon: typeof Users }[] = [
   { id: 'historico', label: 'Histórico', icon: History },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const page = useStore((s) => s.page)
   const setPage = useStore((s) => s.setPage)
   const templates = useStore((s) => s.templates)
@@ -22,8 +22,8 @@ export default function Sidebar() {
   const filledCount = templates.filter(isFilled).length
   const connectedChips = sessions.filter((s) => s.status === 'connected').length
 
-  return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-card/40 p-3">
+  const nav = (
+    <>
       <nav className="flex flex-col gap-1">
         {ITEMS.map(({ id, label, icon: Icon }) => {
           const active = page === id
@@ -44,9 +44,7 @@ export default function Sidebar() {
               {id === 'templates' && (
                 <span
                   className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                    filledCount === 3
-                      ? 'bg-accent/20 text-accent'
-                      : 'bg-white/10 text-ink/60'
+                    filledCount === 3 ? 'bg-accent/20 text-accent' : 'bg-white/10 text-ink/60'
                   }`}
                 >
                   {filledCount}/3 {filledCount === 3 ? '✅' : ''}
@@ -76,6 +74,33 @@ export default function Sidebar() {
         As mensagens são enviadas de verdade pelo WhatsApp conectado. Respeite o intervalo para
         evitar bloqueio do número.
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* Desktop: sidebar fixa */}
+      <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-card/40 p-3 lg:flex">
+        {nav}
+      </aside>
+
+      {/* Mobile: gaveta deslizante */}
+      {open && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+          <aside className="absolute left-0 top-0 flex h-full w-64 max-w-[80%] flex-col border-r border-border bg-card p-3 shadow-2xl">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <span className="text-sm font-bold">
+                Unique<span className="text-accent">Pulse</span>
+              </span>
+              <button onClick={onClose} className="text-ink/50 hover:text-ink">
+                <X size={20} />
+              </button>
+            </div>
+            {nav}
+          </aside>
+        </div>
+      )}
+    </>
   )
 }

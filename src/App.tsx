@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Header from './components/Header'
 import Sidebar from './components/Sidebar'
 import CompletionModal from './components/CompletionModal'
@@ -18,6 +18,12 @@ export default function App() {
   const tick = useStore((s) => s.tick)
   const showCompletion = useStore((s) => s.showCompletion)
   const setSessions = useStore((s) => s.setSessions)
+  const [navOpen, setNavOpen] = useState(false)
+
+  // Close the mobile nav when the page changes.
+  useEffect(() => {
+    setNavOpen(false)
+  }, [page])
 
   // Single global 1s ticker drives the dispatch timer.
   useEffect(() => {
@@ -40,10 +46,10 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col">
-      <Header />
+      <Header onMenu={() => setNavOpen(true)} />
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto p-6">
+        <Sidebar open={navOpen} onClose={() => setNavOpen(false)} />
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           {page === 'dashboard' && <Dashboard />}
           {page === 'contacts' && <Contacts />}
           {page === 'templates' && <Templates />}

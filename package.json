@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "server": "node server/index.js",
+    "tunnel": "cloudflared tunnel --url http://localhost:3001 --no-autoupdate",
     "start": "concurrently -n web,wa -c green,blue \"npm run dev\" \"npm run server\"",
+    "start:remote": "concurrently -n web,wa,tunnel -c green,blue,magenta \"npm run dev\" \"npm run server\" \"npm run tunnel\"",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

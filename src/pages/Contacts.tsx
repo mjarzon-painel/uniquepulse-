@@ -72,7 +72,7 @@ export default function Contacts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold">Contatos</h2>
           <p className="text-sm text-ink/60">Importe um CSV com colunas <code>nome</code> e <code>telefone</code>.</p>
@@ -191,8 +191,8 @@ export default function Contacts() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-card border border-border bg-card">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-card border border-border bg-card">
+        <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink/50">
               <th className="w-10 p-3">

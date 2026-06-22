@@ -53,7 +53,7 @@ export default function Historico() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold">Histórico</h2>
           <p className="text-sm text-ink/60">{history.length} registro(s) de envio.</p>
@@ -61,7 +61,7 @@ export default function Historico() {
         <button
           onClick={exportCSV}
           disabled={rows.length === 0}
-          className="flex items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-black transition enabled:hover:brightness-110 disabled:opacity-40"
+          className="flex items-center justify-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-black transition enabled:hover:brightness-110 disabled:opacity-40"
         >
           <Download size={16} /> Exportar CSV
         </button>
@@ -83,8 +83,8 @@ export default function Historico() {
         ))}
       </div>
 
-      <div className="overflow-hidden rounded-card border border-border bg-card">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-card border border-border bg-card">
+        <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink/50">
               <th className="p-3">Data/Hora</th>
