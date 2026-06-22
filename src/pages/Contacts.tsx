@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react'
-import Papa from 'papaparse'
-import { Upload, Trash2, RotateCcw, FileCheck2, UserPlus } from 'lucide-react'
+import { Upload, Trash2, RotateCcw, FileCheck2, UserPlus, Loader2 } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { templateForPosition, TEMPLATE_COLORS } from '../utils/helpers'
+import { parseContactFile } from '../utils/parseContacts'
 import type { ContactStatus } from '../types'
 
 const STATUS_LABEL: Record<ContactStatus, { label: string; cls: string }> = {
@@ -25,6 +25,7 @@ export default function Contacts() {
 
   const [dragOver, setDragOver] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [parsing, setParsing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [newNome, setNewNome] = useState('')
@@ -45,29 +46,30 @@ export default function Contacts() {
   const sent = contacts.filter((c) => c.status !== 'pending').length
   const progress = contacts.length ? Math.round((sent / contacts.length) * 100) : 0
 
-  function handleFile(file: File) {
-    Papa.parse<Record<string, string>>(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h) => h.trim().toLowerCase(),
-      complete: (res) => {
-        const rows = res.data
-          .map((r) => ({
-            nome: r.nome ?? r.name ?? '',
-            telefone: r.telefone ?? r.phone ?? r.celular ?? '',
-          }))
-          .filter((r) => r.nome || r.telefone)
-        const added = importContacts(rows)
-        const rejected = rows.length - added
-        setMsg(
-          `${added} contato(s) importado(s)${rejected ? `, ${rejected} ignorado(s) (telefone inválido)` : ''}.`,
-        )
-        if (added > 0) {
-          // Extra: auto-navigate to Disparo after import.
-          setTimeout(() => setPage('disparo'), 1200)
-        }
-      },
-    })
+  async function handleFile(file: File) {
+    setParsing(true)
+    setMsg(null)
+    try {
+      const rows = await parseContactFile(file)
+      if (!rows.length) {
+        setMsg(`Não encontrei nenhum telefone válido em "${file.name}". Verifique o arquivo.`)
+        return
+      }
+      const added = importContacts(rows)
+      const skipped = rows.length - added
+      setMsg(
+        `${added} contato(s) importado(s) de "${file.name}"` +
+          (skipped ? ` — ${skipped} ignorado(s) (inválidos ou já cadastrados).` : '.'),
+      )
+      if (added > 0) {
+        // Extra: auto-navigate to Disparo after import.
+        setTimeout(() => setPage('disparo'), 1400)
+      }
+    } catch {
+      setMsg(`Não consegui ler "${file.name}". Formatos aceitos: CSV, Excel, TXT, vCard.`)
+    } finally {
+      setParsing(false)
+    }
   }
 
   return (
@@ -111,13 +113,21 @@ export default function Contacts() {
           dragOver ? 'border-accent bg-accent/5' : 'border-border bg-card/40 hover:border-ink/30'
         }`}
       >
-        <Upload size={28} className="mb-2 text-accent" />
-        <p className="font-medium">Arraste seu CSV aqui ou clique para selecionar</p>
-        <p className="mt-1 text-xs text-ink/50">Colunas aceitas: nome, telefone (com ou sem +55)</p>
+        {parsing ? (
+          <Loader2 size={28} className="mb-2 animate-spin text-accent" />
+        ) : (
+          <Upload size={28} className="mb-2 text-accent" />
+        )}
+        <p className="font-medium">
+          {parsing ? 'Analisando arquivo…' : 'Arraste a lista de contatos aqui ou clique para selecionar'}
+        </p>
+        <p className="mt-1 text-xs text-ink/50">
+          CSV, Excel (.xlsx), TXT ou vCard (.vcf) — eu detecto sozinho os nomes e os números.
+        </p>
         <input
           ref={inputRef}
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,.tsv,.txt,.vcf,.xlsx,.xls,text/csv"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0]

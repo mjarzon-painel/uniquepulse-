@@ -175,22 +175,26 @@ export const useStore = create<State>()(
       },
 
       importContacts: (rows) => {
+        const existing = get().contacts
+        const seen = new Set(existing.map((c) => formatPhone(c.telefone)))
         const valid: Contact[] = []
         for (const r of rows) {
           const nome = (r.nome || '').trim()
           const telefone = (r.telefone || '').trim()
-          if (!nome || !telefone) continue
-          if (!isValidPhone(telefone)) continue
+          if (!telefone || !isValidPhone(telefone)) continue
+          const normalized = formatPhone(telefone)
+          if (seen.has(normalized)) continue // já existe (ou duplicado no arquivo)
+          seen.add(normalized)
           valid.push({
             id: uid(),
-            nome,
-            telefone: formatPhone(telefone),
+            nome: nome || normalized,
+            telefone: normalized,
             status: 'pending',
             templateUsed: null,
           })
         }
         if (valid.length) {
-          set({ contacts: [...get().contacts, ...valid] })
+          set({ contacts: [...existing, ...valid] })
         }
         return valid.length
       },

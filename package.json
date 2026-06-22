@@ -24,6 +24,7 @@
     "socket.io": "^4.7.5",
     "socket.io-client": "^4.7.5",
     "whatsapp-web.js": "^1.26.0",
+    "xlsx": "^0.18.5",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
