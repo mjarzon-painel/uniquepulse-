@@ -88,6 +88,9 @@ interface State {
   history: HistoryEntry[]
   showCompletion: boolean
 
+  isViewer: boolean // true = este aparelho está só vendo (operador é outro)
+  applyMirror: (s: any) => void
+
   setPage: (p: Page) => void
   setSessions: (sessions: ChipSession[]) => void
   toggleDispatchChip: (id: string) => void
@@ -130,6 +133,7 @@ export const useStore = create<State>()(
       page: 'dashboard',
       connected: false,
       sessions: [],
+      isViewer: false,
       dispatchChips: [],
       chipCursor: 0,
       contacts: EXAMPLE_CONTACTS,
@@ -145,6 +149,25 @@ export const useStore = create<State>()(
       log: [],
       history: [],
       showCompletion: false,
+
+      applyMirror: (s) => {
+        // Aplica o estado recebido de outro aparelho (operador) e entra em modo visor.
+        set({
+          isViewer: true,
+          contacts: Array.isArray(s.contacts) ? s.contacts : get().contacts,
+          templates: Array.isArray(s.templates) ? s.templates : get().templates,
+          settings: s.settings ?? get().settings,
+          dispatch: s.dispatch ?? get().dispatch,
+          queue: Array.isArray(s.queue) ? s.queue : get().queue,
+          queuePos: typeof s.queuePos === 'number' ? s.queuePos : get().queuePos,
+          chipCursor: typeof s.chipCursor === 'number' ? s.chipCursor : get().chipCursor,
+          dispatchChips: Array.isArray(s.dispatchChips) ? s.dispatchChips : get().dispatchChips,
+          nextSendAt: s.nextSendAt ?? null,
+          currentIntervalMs: typeof s.currentIntervalMs === 'number' ? s.currentIntervalMs : get().currentIntervalMs,
+          log: Array.isArray(s.log) ? s.log : get().log,
+          history: Array.isArray(s.history) ? s.history : get().history,
+        })
+      },
 
       setPage: (p) => set({ page: p }),
 
@@ -318,6 +341,7 @@ export const useStore = create<State>()(
 
       tick: () => {
         const s = get()
+        if (s.isViewer) return // visor não dispara; só o operador
         if (s.dispatch !== 'running' || s.sending || s.nextSendAt == null) return
         if (Date.now() < s.nextSendAt) return
         if (s.settings.businessHours && !isWithinBusinessHours()) return
@@ -475,6 +499,7 @@ export const useStore = create<State>()(
           }
           state.showCompletion = false
           state.sending = false
+          state.isViewer = false
           // Connection/chips are owned by the backend — re-sync on load, never trust storage.
           state.connected = false
           state.sessions = []

@@ -238,9 +238,22 @@ function restoreSessions() {
   if (dirs.length) console.log(`[wa] restaurando ${dirs.length} chip(s) salvos…`)
 }
 
+// ---- Espelhamento de estado (operador → visores) ----
+// Guarda o último estado enviado pelo "operador" (o aparelho que controla o disparo)
+// e repassa para os demais aparelhos conectados, ao vivo.
+let mirror = null // { clientId, state }
+
 // ---- Socket ----
 io.on('connection', (socket) => {
   socket.emit('sessions', publicSessions())
+  // Manda o estado atual para quem acabou de conectar (ex.: celular abrindo o painel).
+  if (mirror) socket.emit('mirror-state', mirror)
+
+  socket.on('push-state', (payload) => {
+    if (!payload || typeof payload !== 'object') return
+    mirror = payload
+    socket.broadcast.emit('mirror-state', payload) // repassa aos outros aparelhos
+  })
 })
 
 // ---- REST API ----

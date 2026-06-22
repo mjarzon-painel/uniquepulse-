@@ -23,11 +23,19 @@ export interface ChipSession {
 
 let socket: Socket | null = null
 
+// Identifica este aparelho/aba (para não aplicar o próprio estado de volta).
+export const CLIENT_ID = Math.random().toString(36).slice(2)
+
 export function getSocket(): Socket {
   if (!socket) {
     socket = io(getApiUrl(), { transports: ['websocket', 'polling'] })
   }
   return socket
+}
+
+/** Operador envia seu estado para o servidor espelhar nos outros aparelhos. */
+export function pushState(state: unknown) {
+  getSocket().emit('push-state', { clientId: CLIENT_ID, state })
 }
 
 export async function fetchSessions(): Promise<ChipSession[] | null> {
