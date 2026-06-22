@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "lucide-react": "^0.379.0",
     "papaparse": "^5.4.1",

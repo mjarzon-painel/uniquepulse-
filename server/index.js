@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import fs from 'fs'
@@ -13,12 +14,30 @@ const PORT = 3001
 const AUTH_DIR = '.wwebjs_auth'
 const NAMES_FILE = path.join(AUTH_DIR, 'names.json')
 
+// Chave de acesso. Defina WA_TOKEN ao expor o backend na internet.
+// Sem token (uso local), as rotas ficam abertas.
+const TOKEN = process.env.WA_TOKEN || ''
+
 const app = express()
 app.use(cors())
 app.use(express.json({ limit: '15mb' }))
 
+// Protege todas as rotas /api quando há token configurado.
+app.use('/api', (req, res, next) => {
+  if (!TOKEN) return next()
+  if (req.headers['x-wa-token'] === TOKEN) return next()
+  return res.status(401).json({ ok: false, error: 'Não autorizado (token inválido).' })
+})
+
 const httpServer = createServer(app)
 const io = new Server(httpServer, { cors: { origin: '*' } })
+
+// Protege o socket também.
+io.use((socket, next) => {
+  if (!TOKEN) return next()
+  if (socket.handshake.auth?.token === TOKEN) return next()
+  next(new Error('unauthorized'))
+})
 
 // ---- Multi-session registry ----
 // id -> { id, name, status, qr, me, client, readyWatch }
@@ -332,6 +351,7 @@ setInterval(async () => {
 
 httpServer.listen(PORT, () => {
   console.log(`\n  UniquePulse backend (multi-chip) em http://localhost:${PORT}`)
+  console.log(`  Proteção por token: ${TOKEN ? 'ATIVA ✓' : 'desligada (defina WA_TOKEN ao expor publicamente)'}`)
   restoreSessions()
   if (!sessions.size) console.log('  Nenhum chip salvo. Adicione um chip pela dashboard.\n')
 })
