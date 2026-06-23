@@ -122,14 +122,22 @@ function defaultState() {
   }
 }
 
+function readStateFile(file) {
+  const s = JSON.parse(fs.readFileSync(file, 'utf8'))
+  const merged = { ...defaultState(), ...s }
+  merged.sending = false
+  return merged
+}
 let appState = (() => {
   try {
-    const s = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'))
-    const merged = { ...defaultState(), ...s }
-    merged.sending = false
-    return merged
+    return readStateFile(STATE_FILE)
   } catch {
-    return defaultState()
+    try {
+      console.warn('[state] arquivo principal inválido — restaurando backup (.bak)')
+      return readStateFile(STATE_FILE + '.bak')
+    } catch {
+      return defaultState()
+    }
   }
 })()
 
@@ -138,7 +146,16 @@ function saveState() {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
     try {
-      fs.writeFileSync(STATE_FILE, JSON.stringify(appState))
+      // Gravação atômica: escreve em .tmp e renomeia. Se cair no meio, o arquivo
+      // principal continua íntegro (nunca fica pela metade).
+      const tmp = STATE_FILE + '.tmp'
+      fs.writeFileSync(tmp, JSON.stringify(appState))
+      try {
+        fs.copyFileSync(STATE_FILE, STATE_FILE + '.bak')
+      } catch {
+        /* primeira vez não tem backup ainda */
+      }
+      fs.renameSync(tmp, STATE_FILE)
     } catch (e) {
       console.error('[state] save erro', e?.message)
     }
