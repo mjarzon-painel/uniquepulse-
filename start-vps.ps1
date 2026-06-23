@@ -1,14 +1,14 @@
-# UniquePulse — inicia backend + tunel (usado pela tarefa agendada no boot/logon)
+# UniquePulse — inicia backend + tunel FIXO (ngrok). Usado no boot/logon (auto-start).
 $root = Join-Path $env:USERPROFILE 'uniquepulse'
+$DOMAIN = 'swung-dig-chastity.ngrok-free.dev' # URL fixa do ngrok
 
-# Encerra instancias antigas para nao duplicar
-Get-Process node, cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+# Encerra instancias antigas (inclui cloudflared, que foi substituido pelo ngrok)
+Get-Process node, cloudflared, ngrok -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 
 # Backend
 Start-Process "$root\node\node.exe" -ArgumentList 'server/index.js' -WorkingDirectory "$root\app" -WindowStyle Hidden
-Start-Sleep -Seconds 4
+Start-Sleep -Seconds 3
 
-# Tunel
-if (Test-Path "$root\tunnel.log") { Remove-Item "$root\tunnel.log" -Force -ErrorAction SilentlyContinue }
-Start-Process "$root\cloudflared.exe" -ArgumentList "tunnel --url http://localhost:3001 --no-autoupdate --logfile `"$root\tunnel.log`"" -WindowStyle Hidden
+# Tunel fixo (ngrok) — authtoken ja configurado uma vez via 'ngrok config add-authtoken'
+Start-Process "$root\ngrok.exe" -ArgumentList "http --domain=$DOMAIN 3001" -WindowStyle Hidden
