@@ -11,6 +11,10 @@ import pkg from 'whatsapp-web.js'
 
 const { Client, LocalAuth, MessageMedia } = pkg
 
+// Resiliência: um erro em um chip (Chromium/puppeteer) NÃO pode derrubar o servidor inteiro.
+process.on('uncaughtException', (e) => console.error('[uncaughtException]', e?.message || e))
+process.on('unhandledRejection', (e) => console.error('[unhandledRejection]', e?.message || e))
+
 const PORT = 3001
 const __dirname = path.dirname(fileURLToPath(import.meta.url)) // .../app/server
 const DATA_DIR = path.resolve(__dirname, '..', '..') // pasta raiz (acima de /app) — persiste entre updates
