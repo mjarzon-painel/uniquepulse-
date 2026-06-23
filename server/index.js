@@ -310,7 +310,8 @@ async function sendToChip(chip, phone, message, imageBase64, caption) {
     const mimetype = m ? m[1] : 'image/jpeg'
     const data = m ? m[2] : imageBase64
     const media = new MessageMedia(mimetype, data, 'imagem')
-    await chip.client.sendMessage(numberId._serialized, media, { caption: caption || message || '' })
+    // A mensagem (texto) vai como legenda, embaixo da imagem.
+    await chip.client.sendMessage(numberId._serialized, media, { caption: message || caption || '' })
   } else {
     await chip.client.sendMessage(numberId._serialized, message || '')
   }

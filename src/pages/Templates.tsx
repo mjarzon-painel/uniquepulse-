@@ -126,18 +126,6 @@ export default function Templates() {
             />
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink/50">
-              Legenda da imagem
-            </label>
-            <input
-              value={t.caption}
-              onChange={(e) => updateTemplate(active, { caption: e.target.value })}
-              placeholder="Legenda com {{nome}}"
-              className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none transition focus:border-accent"
-            />
-          </div>
-
           <button
             onClick={save}
             className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:brightness-110"
@@ -155,11 +143,12 @@ export default function Templates() {
           <WhatsAppBubble
             text={personalize(t.text, previewName)}
             image={t.image}
-            caption={personalize(t.caption, previewName)}
+            caption=""
             typingKey={typingKey}
           />
           <p className="text-xs text-ink/40">
-            Se nenhuma imagem for adicionada, apenas o texto é enviado (sem erro).
+            Com imagem, o texto vai como <b>legenda (embaixo da imagem)</b>. Sem imagem, vai só o
+            texto.
           </p>
         </div>
       </div>
