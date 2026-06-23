@@ -1,6 +1,6 @@
-# UniquePulse — instalacao no VPS Windows (rodar no PowerShell do servidor)
+# UniquePulse — instalacao no VPS Windows (rodar no PowerShell DO SERVIDOR)
 $ErrorActionPreference = 'Stop'
-$root = 'C:\uniquepulse'
+$root = Join-Path $env:USERPROFILE 'uniquepulse'
 New-Item -ItemType Directory -Force $root | Out-Null
 
 Write-Host '== 1/5 Baixando Node.js (portatil) ==' -ForegroundColor Cyan
@@ -33,13 +33,13 @@ Write-Host '== 5/5 Iniciando backend + tunel ==' -ForegroundColor Cyan
 Start-Process "$root\node\node.exe" -ArgumentList 'server/index.js' -WorkingDirectory "$root\app" -WindowStyle Minimized
 Start-Sleep 4
 if (Test-Path "$root\tunnel.log") { Remove-Item "$root\tunnel.log" -Force }
-Start-Process "$root\cloudflared.exe" -ArgumentList 'tunnel --url http://localhost:3001 --no-autoupdate --logfile C:\uniquepulse\tunnel.log' -WindowStyle Minimized
+Start-Process "$root\cloudflared.exe" -ArgumentList "tunnel --url http://localhost:3001 --no-autoupdate --logfile `"$root\tunnel.log`"" -WindowStyle Minimized
 Write-Host 'Aguardando o tunel gerar a URL...' -ForegroundColor Cyan
 Start-Sleep 10
 $u = (Select-String -Path "$root\tunnel.log" -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' -ErrorAction SilentlyContinue | Select-Object -Last 1).Matches.Value
 Write-Host ''
 Write-Host '==================================================' -ForegroundColor Green
 if ($u) { Write-Host "URL DO BACKEND: $u" -ForegroundColor Green }
-else { Write-Host 'Tunel ainda subindo. Rode:  Get-Content C:\uniquepulse\tunnel.log | Select-String trycloudflare' -ForegroundColor Yellow }
+else { Write-Host "Tunel ainda subindo. Rode:  Get-Content `"$root\tunnel.log`" | Select-String trycloudflare" -ForegroundColor Yellow }
 Write-Host 'Copie essa URL e mande no chat.' -ForegroundColor Green
 Write-Host '==================================================' -ForegroundColor Green
