@@ -8,7 +8,8 @@ export function getApiUrl(): string {
 }
 
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  return { ...extra }
+  // 'ngrok-skip-browser-warning' pula a página de aviso do ngrok grátis.
+  return { 'ngrok-skip-browser-warning': 'true', ...extra }
 }
 
 export type WaStatus = 'starting' | 'disconnected' | 'qr' | 'authenticated' | 'connected'
@@ -28,7 +29,10 @@ export const CLIENT_ID = Math.random().toString(36).slice(2)
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io(getApiUrl(), { transports: ['websocket', 'polling'] })
+    socket = io(getApiUrl(), {
+      transports: ['websocket', 'polling'],
+      extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
+    })
   }
   return socket
 }
