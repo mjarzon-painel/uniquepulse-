@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type {
   Contact,
-  ContactStatus,
   DispatchState,
   HistoryEntry,
   LogLine,
@@ -10,139 +9,83 @@ import type {
   Settings,
   Template,
 } from '../types'
-import {
-  filledTemplateIds,
-  formatPhone,
-  isValidPhone,
-  isWithinBusinessHours,
-  msToClock,
-  nowDateTime,
-  nowTime,
-  personalize,
-  randomIntervalMs,
-  templateForPosition,
-  uid,
-} from '../utils/helpers'
-import { sendMessage, type ChipSession } from '../utils/api'
+import { formatPhone, isValidPhone } from '../utils/helpers'
+import { sendAction, type ChipSession } from '../utils/api'
 import { LOGIN_USER, LOGIN_PASS } from '../config'
 
-/** Chips habilitados e conectados, na ordem do round-robin. */
-function dispatchPool(sessions: ChipSession[], dispatchChips: string[]): ChipSession[] {
-  const connected = sessions.filter((s) => s.status === 'connected')
-  if (!dispatchChips.length) return connected
-  return connected.filter((s) => dispatchChips.includes(s.id))
-}
-
+// Templates iniciais (só para a primeira renderização; o backend manda os reais ao conectar).
 const DEFAULT_TEMPLATES: Template[] = [
-  {
-    id: 0,
-    name: 'Oferta Direta',
-    text: 'Olá {{nome}}! 🚗 Temos uma oferta imperdível esperando por você. Condições especiais com entrada facilitada. Quer saber mais?',
-    image: null,
-    caption: 'Oferta especial para você, {{nome}}!',
-  },
-  {
-    id: 1,
-    name: 'Abordagem Consultiva',
-    text: 'Oi {{nome}}, tudo bem? Sou consultor da loja e gostaria de entender o que você procura para te ajudar a encontrar o carro ideal. Posso te fazer algumas perguntas?',
-    image: null,
-    caption: 'Estamos aqui para te ajudar, {{nome}}.',
-  },
-  {
-    id: 2,
-    name: 'Urgência',
-    text: '⏰ {{nome}}, últimas unidades com esse preço! A promoção acaba hoje. Garanta já o seu antes que esgote!',
-    image: null,
-    caption: 'Corre, {{nome}}! Acaba hoje.',
-  },
+  { id: 0, name: 'Oferta Direta', text: '', image: null, caption: '' },
+  { id: 1, name: 'Abordagem Consultiva', text: '', image: null, caption: '' },
+  { id: 2, name: 'Urgência', text: '', image: null, caption: '' },
 ]
 
-const EXAMPLE_CONTACTS: Contact[] = [
-  { id: uid(), nome: 'Maria Souza', telefone: '+5511999990000', status: 'pending', templateUsed: null },
-  { id: uid(), nome: 'João Silva', telefone: '+5511999990001', status: 'pending', templateUsed: null },
-  { id: uid(), nome: 'Pedro Lima', telefone: '+5511999990002', status: 'pending', templateUsed: null },
-  { id: uid(), nome: 'Ana Costa', telefone: '+5511999990003', status: 'pending', templateUsed: null },
-  { id: uid(), nome: 'Carla Dias', telefone: '+5521988887777', status: 'pending', templateUsed: null },
-]
+// Flags para não sobrescrever edições locais (template/settings) enquanto o envio ao backend está pendente.
+let pendingTemplate = false
+let pendingSettings = false
+let tmplTimer: ReturnType<typeof setTimeout> | undefined
+let setTimer: ReturnType<typeof setTimeout> | undefined
+let lastTmplId = 0
 
-interface State {
-  authed: boolean
-  login: (user: string, pass: string) => boolean
-  logout: () => void
-  page: Page
-  connected: boolean // derivado: existe ao menos 1 chip conectado
-  sessions: ChipSession[] // chips sincronizados do backend
-  dispatchChips: string[] // ids dos chips habilitados p/ disparo (vazio = todos conectados)
-  chipCursor: number // posição do round-robin
+/** Estado compartilhado vindo do backend. */
+interface AppStatePayload {
   contacts: Contact[]
-  selected: string[]
   templates: Template[]
   settings: Settings
+  dispatchChips: string[]
   dispatch: DispatchState
   queue: string[]
   queuePos: number
+  chipCursor: number
   nextSendAt: number | null
-  currentIntervalMs: number // duração do ciclo atual (sorteado) — usado no countdown
+  currentIntervalMs: number
   sending: boolean
   log: LogLine[]
   history: HistoryEntry[]
   showCompletion: boolean
+}
 
-  isViewer: boolean // true = este aparelho está só vendo (operador é outro)
-  applyMirror: (s: any) => void
+interface State extends AppStatePayload {
+  authed: boolean
+  login: (user: string, pass: string) => boolean
+  logout: () => void
+  page: Page
+  connected: boolean
+  sessions: ChipSession[]
+  selected: string[]
+
+  setAppState: (s: AppStatePayload) => void
+  setSessions: (sessions: ChipSession[]) => void
 
   setPage: (p: Page) => void
-  setSessions: (sessions: ChipSession[]) => void
   toggleDispatchChip: (id: string) => void
-
   importContacts: (rows: { nome: string; telefone: string }[]) => number
   addContact: (nome: string, telefone: string) => boolean
   toggleSelect: (id: string) => void
   toggleSelectAll: () => void
   clearList: () => void
   resetStatus: () => void
-
   updateTemplate: (id: number, patch: Partial<Template>) => void
   updateSettings: (patch: Partial<Settings>) => void
-
   start: () => void
   pause: () => void
   stop: () => void
-  tick: () => void
-  processNext: () => Promise<void>
   resetCampaign: () => void
   closeCompletion: () => void
-}
-
-function pushLog(log: LogLine[], line: Omit<LogLine, 'id' | 'time'>): LogLine[] {
-  const entry: LogLine = { id: uid(), time: nowTime(), ...line }
-  return [...log, entry].slice(-30)
 }
 
 export const useStore = create<State>()(
   persist(
     (set, get) => ({
-      authed: false,
-      login: (user, pass) => {
-        const ok =
-          user.trim().toLowerCase() === LOGIN_USER.toLowerCase() && pass === LOGIN_PASS
-        if (ok) set({ authed: true })
-        return ok
-      },
-      logout: () => set({ authed: false }),
-      page: 'dashboard',
-      connected: false,
-      sessions: [],
-      isViewer: false,
-      dispatchChips: [],
-      chipCursor: 0,
-      contacts: EXAMPLE_CONTACTS,
-      selected: [],
+      // ---- shared (backend) ----
+      contacts: [],
       templates: DEFAULT_TEMPLATES,
       settings: { intervalMin: 8, intervalMax: 15, businessHours: false, order: 'sequential' },
+      dispatchChips: [],
       dispatch: 'stopped',
       queue: [],
       queuePos: 0,
+      chipCursor: 0,
       nextSendAt: null,
       currentIntervalMs: 0,
       sending: false,
@@ -150,377 +93,120 @@ export const useStore = create<State>()(
       history: [],
       showCompletion: false,
 
-      applyMirror: (s) => {
-        // Aplica o estado recebido de outro aparelho (operador) e entra em modo visor.
-        set({
-          isViewer: true,
-          contacts: Array.isArray(s.contacts) ? s.contacts : get().contacts,
-          templates: Array.isArray(s.templates) ? s.templates : get().templates,
-          settings: s.settings ?? get().settings,
-          dispatch: s.dispatch ?? get().dispatch,
-          queue: Array.isArray(s.queue) ? s.queue : get().queue,
-          queuePos: typeof s.queuePos === 'number' ? s.queuePos : get().queuePos,
-          chipCursor: typeof s.chipCursor === 'number' ? s.chipCursor : get().chipCursor,
-          dispatchChips: Array.isArray(s.dispatchChips) ? s.dispatchChips : get().dispatchChips,
-          nextSendAt: s.nextSendAt ?? null,
-          currentIntervalMs: typeof s.currentIntervalMs === 'number' ? s.currentIntervalMs : get().currentIntervalMs,
-          log: Array.isArray(s.log) ? s.log : get().log,
-          history: Array.isArray(s.history) ? s.history : get().history,
-        })
+      // ---- local ----
+      authed: false,
+      page: 'dashboard',
+      connected: false,
+      sessions: [],
+      selected: [],
+
+      login: (user, pass) => {
+        const ok = user.trim().toLowerCase() === LOGIN_USER.toLowerCase() && pass === LOGIN_PASS
+        if (ok) set({ authed: true })
+        return ok
       },
+      logout: () => set({ authed: false }),
+
+      // Recebe o estado autoritativo do servidor (ao vivo, para todos os aparelhos).
+      setAppState: (s) => {
+        const patch: Partial<State> = {
+          contacts: s.contacts,
+          dispatchChips: s.dispatchChips,
+          dispatch: s.dispatch,
+          queue: s.queue,
+          queuePos: s.queuePos,
+          chipCursor: s.chipCursor,
+          nextSendAt: s.nextSendAt,
+          currentIntervalMs: s.currentIntervalMs,
+          sending: s.sending,
+          log: s.log,
+          history: s.history,
+          showCompletion: s.showCompletion,
+        }
+        // Não sobrescreve edições locais pendentes de template/settings.
+        if (!pendingTemplate) patch.templates = s.templates
+        if (!pendingSettings) patch.settings = s.settings
+        set(patch)
+      },
+
+      setSessions: (sessions) =>
+        set({ sessions, connected: sessions.some((s) => s.status === 'connected') }),
 
       setPage: (p) => set({ page: p }),
 
-      setSessions: (sessions) => {
-        const anyConnected = sessions.some((s) => s.status === 'connected')
-        // Drop ids that no longer exist from the enabled list.
-        const ids = new Set(sessions.map((s) => s.id))
-        const dispatchChips = get().dispatchChips.filter((id) => ids.has(id))
-        set({ sessions, connected: anyConnected, dispatchChips })
-        // If every chip dropped while running, pause.
-        if (!anyConnected && get().dispatch === 'running') {
-          set({
-            dispatch: 'paused',
-            nextSendAt: null,
-            log: pushLog(get().log, {
-              kind: 'error',
-              text: '🔌 Todos os chips desconectaram — disparo pausado.',
-            }),
-          })
-        }
-      },
-
-      toggleDispatchChip: (id) => {
-        const cur = get().dispatchChips
-        set({
-          dispatchChips: cur.includes(id) ? cur.filter((c) => c !== id) : [...cur, id],
-        })
-      },
+      toggleDispatchChip: (id) => sendAction('toggleDispatchChip', { id }),
 
       importContacts: (rows) => {
-        const existing = get().contacts
-        const seen = new Set(existing.map((c) => formatPhone(c.telefone)))
-        const valid: Contact[] = []
+        // Conta quantos serão realmente adicionados (válidos e não duplicados), para a mensagem.
+        const seen = new Set(get().contacts.map((c) => formatPhone(c.telefone)))
+        let added = 0
         for (const r of rows) {
-          const nome = (r.nome || '').trim()
-          const telefone = (r.telefone || '').trim()
-          if (!telefone || !isValidPhone(telefone)) continue
-          const normalized = formatPhone(telefone)
-          if (seen.has(normalized)) continue // já existe (ou duplicado no arquivo)
-          seen.add(normalized)
-          valid.push({
-            id: uid(),
-            nome: nome || normalized,
-            telefone: normalized,
-            status: 'pending',
-            templateUsed: null,
-          })
+          const tel = (r.telefone || '').trim()
+          if (!tel || !isValidPhone(tel)) continue
+          const norm = formatPhone(tel)
+          if (seen.has(norm)) continue
+          seen.add(norm)
+          added++
         }
-        if (valid.length) {
-          set({ contacts: [...existing, ...valid] })
-        }
-        return valid.length
+        sendAction('importContacts', { rows })
+        return added
       },
 
       addContact: (nome, telefone) => {
-        const n = nome.trim()
-        const t = telefone.trim()
-        if (!n || !isValidPhone(t)) return false
-        const contact: Contact = {
-          id: uid(),
-          nome: n,
-          telefone: formatPhone(t),
-          status: 'pending',
-          templateUsed: null,
-        }
-        set({ contacts: [...get().contacts, contact] })
+        if (!isValidPhone(telefone.trim())) return false
+        sendAction('addContact', { nome, telefone })
         return true
       },
 
       toggleSelect: (id) => {
         const sel = get().selected
-        set({
-          selected: sel.includes(id) ? sel.filter((s) => s !== id) : [...sel, id],
-        })
+        set({ selected: sel.includes(id) ? sel.filter((s) => s !== id) : [...sel, id] })
       },
-
       toggleSelectAll: () => {
         const { contacts, selected } = get()
         set({ selected: selected.length === contacts.length ? [] : contacts.map((c) => c.id) })
       },
 
-      clearList: () =>
-        set({
-          contacts: [],
-          selected: [],
-          dispatch: 'stopped',
-          queue: [],
-          queuePos: 0,
-          nextSendAt: null,
-        }),
+      clearList: () => {
+        set({ selected: [] })
+        sendAction('clearList')
+      },
+      resetStatus: () => sendAction('resetStatus'),
 
-      resetStatus: () =>
-        set({
-          contacts: get().contacts.map((c) => ({ ...c, status: 'pending', templateUsed: null })),
-          dispatch: 'stopped',
-          queue: [],
-          queuePos: 0,
-          nextSendAt: null,
-        }),
-
-      updateTemplate: (id, patch) =>
-        set({
-          templates: get().templates.map((t) => (t.id === id ? { ...t, ...patch } : t)),
-        }),
-
-      updateSettings: (patch) => set({ settings: { ...get().settings, ...patch } }),
-
-      start: () => {
-        const { contacts, settings, dispatch, queue, queuePos } = get()
-        // Resume from pause keeps queue/pos.
-        if (dispatch === 'paused' && queue.length) {
-          const iv = randomIntervalMs(settings.intervalMin, settings.intervalMax)
-          set({
-            dispatch: 'running',
-            nextSendAt: Date.now() + iv,
-            currentIntervalMs: iv,
-            log: pushLog(get().log, {
-              kind: 'info',
-              text: `▶️ Disparo retomado — próximo em ${msToClock(iv)}.`,
-            }),
-          })
-          return
-        }
-        // Fresh start: build queue from pending contacts.
-        let pending = contacts.filter((c) => c.status === 'pending').map((c) => c.id)
-        if (!pending.length) {
-          set({ log: pushLog(get().log, { kind: 'info', text: '⚠️ Nenhum contato pendente para disparar.' }) })
-          return
-        }
-        if (settings.order === 'random') {
-          pending = [...pending]
-          for (let i = pending.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1))
-            ;[pending[i], pending[j]] = [pending[j], pending[i]]
-          }
-        }
-        const iv = randomIntervalMs(settings.intervalMin, settings.intervalMax)
-        const pool = dispatchPool(get().sessions, get().dispatchChips)
-        set({
-          dispatch: 'running',
-          queue: pending,
-          queuePos: 0,
-          chipCursor: 0,
-          nextSendAt: Date.now() + iv,
-          currentIntervalMs: iv,
-          log: pushLog(get().log, {
-            kind: 'info',
-            text: `🚀 Campanha iniciada — ${pending.length} contato(s). Revezando ${pool.length} chip(s), intervalo ${settings.intervalMin}–${settings.intervalMax} min. Próximo em ${msToClock(iv)}.`,
-          }),
-        })
+      // Edição de template: otimista local + envio com debounce (não trava a digitação).
+      updateTemplate: (id, patch) => {
+        pendingTemplate = true
+        lastTmplId = id
+        set({ templates: get().templates.map((t) => (t.id === id ? { ...t, ...patch } : t)) })
+        clearTimeout(tmplTimer)
+        tmplTimer = setTimeout(() => {
+          const full = get().templates.find((t) => t.id === lastTmplId)
+          sendAction('updateTemplate', { id: lastTmplId, patch: full })
+          pendingTemplate = false
+        }, 500)
       },
 
-      pause: () => {
-        if (get().dispatch !== 'running') return
-        set({
-          dispatch: 'paused',
-          nextSendAt: null,
-          log: pushLog(get().log, { kind: 'info', text: '⏸️ Disparo pausado.' }),
-        })
+      updateSettings: (patch) => {
+        pendingSettings = true
+        set({ settings: { ...get().settings, ...patch } })
+        clearTimeout(setTimer)
+        setTimer = setTimeout(() => {
+          sendAction('updateSettings', { patch: get().settings })
+          pendingSettings = false
+        }, 400)
       },
 
-      stop: () => {
-        set({
-          dispatch: 'stopped',
-          queue: [],
-          queuePos: 0,
-          nextSendAt: null,
-          log: pushLog(get().log, { kind: 'info', text: '⏹️ Disparo parado.' }),
-        })
-      },
-
-      tick: () => {
-        const s = get()
-        if (s.isViewer) return // visor não dispara; só o operador
-        if (s.dispatch !== 'running' || s.sending || s.nextSendAt == null) return
-        if (Date.now() < s.nextSendAt) return
-        if (s.settings.businessHours && !isWithinBusinessHours()) return
-        void get().processNext()
-      },
-
-      // Sends the current contact for real via the backend, then schedules the next.
-      processNext: async () => {
-        const s = get()
-        const { queue, queuePos, contacts, templates, settings } = s
-
-        if (queuePos >= queue.length) {
-          set({ dispatch: 'stopped', nextSendAt: null, sending: false, showCompletion: true })
-          return
-        }
-
-        const id = queue[queuePos]
-        const contact = contacts.find((c) => c.id === id)
-        if (!contact) {
-          set({ queuePos: queuePos + 1 })
-          return
-        }
-
-        // Round-robin: pick the next chip among enabled+connected ones.
-        const pool = dispatchPool(s.sessions, s.dispatchChips)
-        if (!pool.length) {
-          set({
-            dispatch: 'paused',
-            sending: false,
-            nextSendAt: null,
-            log: pushLog(s.log, {
-              kind: 'error',
-              text: '⚠️ Nenhum chip conectado/habilitado — disparo pausado.',
-            }),
-          })
-          return
-        }
-        const chip = pool[s.chipCursor % pool.length]
-        const nextCursor = s.chipCursor + 1
-
-        const tIdx = templateForPosition(queuePos, templates)
-        const tmpl = templates.find((t) => t.id === tIdx) ?? templates[0]
-        const tLabel = `Template ${tIdx + 1}`
-        const msg = personalize(tmpl.text, contact.nome)
-        const caption = personalize(tmpl.caption, contact.nome)
-
-        // Lock so the 1s ticker doesn't fire again while the request is in flight.
-        set({
-          sending: true,
-          chipCursor: nextCursor,
-          nextSendAt: null,
-          log: pushLog(s.log, {
-            kind: 'info',
-            text: `📤 Enviando ${tLabel} via 📱${chip.name} → ${contact.nome} (${contact.telefone})…`,
-          }),
-        })
-
-        const res = await sendMessage({
-          sessionId: chip.id,
-          phone: contact.telefone,
-          message: msg,
-          imageBase64: tmpl.image,
-          caption,
-        })
-
-        const chipName = res.chip || chip.name
-        const cur = get()
-        const success = res.ok
-        const newStatus: ContactStatus = success ? 'sent' : 'error'
-        const newContacts = cur.contacts.map((c) =>
-          c.id === id ? { ...c, status: newStatus, templateUsed: tIdx } : c,
-        )
-
-        const hist: HistoryEntry = {
-          id: uid(),
-          datetime: nowDateTime(),
-          ts: Date.now(),
-          nome: contact.nome,
-          telefone: contact.telefone,
-          template: tIdx,
-          status: success ? 'sent' : 'error',
-          preview: msg.slice(0, 120),
-          chip: chipName,
-        }
-
-        let log = cur.log
-        if (success) {
-          log = pushLog(log, {
-            kind: 'success',
-            text: `✅ ${tLabel} via 📱${chipName} → ${contact.nome} (${contact.telefone})`,
-          })
-        } else {
-          log = pushLog(log, {
-            kind: 'error',
-            text: `❌ Falha via 📱${chipName} → ${contact.nome} — ${res.error ?? 'erro desconhecido'}`,
-          })
-        }
-
-        const nextPos = queuePos + 1
-        const finished = nextPos >= queue.length
-        const wasRunning = cur.dispatch === 'running'
-
-        let nextSendAt: number | null = null
-        let nextIntervalMs = cur.currentIntervalMs
-        let newDispatch = cur.dispatch
-        if (finished) {
-          newDispatch = 'stopped'
-        } else if (wasRunning) {
-          nextIntervalMs = randomIntervalMs(settings.intervalMin, settings.intervalMax)
-          nextSendAt = Date.now() + nextIntervalMs
-          const nextContact = newContacts.find((c) => c.id === queue[nextPos])
-          const nextT = templateForPosition(nextPos, templates) + 1
-          log = pushLog(log, {
-            kind: 'info',
-            text: `⏳ Próximo envio em ${msToClock(nextIntervalMs)} → ${nextContact?.nome ?? '—'} — Template ${nextT}`,
-          })
-        }
-
-        set({
-          contacts: newContacts,
-          history: [hist, ...cur.history],
-          log,
-          queuePos: nextPos,
-          nextSendAt,
-          currentIntervalMs: nextIntervalMs,
-          sending: false,
-          dispatch: newDispatch,
-          showCompletion: finished ? true : cur.showCompletion,
-        })
-      },
-
-      resetCampaign: () =>
-        set({
-          contacts: get().contacts.map((c) => ({ ...c, status: 'pending', templateUsed: null })),
-          dispatch: 'stopped',
-          queue: [],
-          queuePos: 0,
-          nextSendAt: null,
-          showCompletion: false,
-          log: [],
-        }),
-
-      closeCompletion: () => set({ showCompletion: false }),
+      start: () => sendAction('start'),
+      pause: () => sendAction('pause'),
+      stop: () => sendAction('stop'),
+      resetCampaign: () => sendAction('resetCampaign'),
+      closeCompletion: () => sendAction('closeCompletion'),
     }),
     {
       name: 'wa-blast-store',
-      version: 2,
-      onRehydrateStorage: () => (state) => {
-        if (!state) return
-        try {
-          // If a dispatch was running, come back paused (spec).
-          if (state.dispatch === 'running') {
-            state.dispatch = 'paused'
-            state.nextSendAt = null
-          }
-          state.showCompletion = false
-          state.sending = false
-          state.isViewer = false
-          // Connection/chips are owned by the backend — re-sync on load, never trust storage.
-          state.connected = false
-          state.sessions = []
-          // Defaults for fields that may be missing in older saved state.
-          if (!Array.isArray(state.dispatchChips)) state.dispatchChips = []
-          if (typeof state.chipCursor !== 'number') state.chipCursor = 0
-          if (typeof state.currentIntervalMs !== 'number') state.currentIntervalMs = 0
-          if (!state.settings || typeof state.settings !== 'object') {
-            state.settings = { intervalMin: 8, intervalMax: 15, businessHours: false, order: 'sequential' }
-          } else if (typeof state.settings.intervalMax !== 'number') {
-            const base = typeof state.settings.intervalMin === 'number' ? state.settings.intervalMin : 8
-            state.settings.intervalMin = base
-            state.settings.intervalMax = Math.max(base + 5, base)
-          }
-          if (!Array.isArray(state.contacts)) state.contacts = []
-          if (!Array.isArray(state.history)) state.history = []
-          if (!Array.isArray(state.log)) state.log = []
-        } catch (e) {
-          console.error('Falha ao migrar estado salvo:', e)
-        }
-      },
+      version: 3,
+      // Só guarda login e página no navegador. Os dados (contatos, disparo...) vêm do servidor.
+      partialize: (s) => ({ authed: s.authed, page: s.page }),
     },
   ),
 )

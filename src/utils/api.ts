@@ -33,9 +33,9 @@ export function getSocket(): Socket {
   return socket
 }
 
-/** Operador envia seu estado para o servidor espelhar nos outros aparelhos. */
-export function pushState(state: unknown) {
-  getSocket().emit('push-state', { clientId: CLIENT_ID, state })
+/** Envia uma ação para o servidor (estado compartilhado entre todos os aparelhos). */
+export function sendAction(type: string, payload?: unknown) {
+  getSocket().emit('action', { type, payload })
 }
 
 export async function fetchSessions(): Promise<ChipSession[] | null> {
