@@ -77,6 +77,24 @@ export async function logoutSession(id: string): Promise<void> {
   }
 }
 
+/** Gera um código de pareamento (8 caracteres) para conectar por número de telefone. */
+export async function requestPairingCode(
+  id: string,
+  phone: string,
+): Promise<{ ok: boolean; code?: string; error?: string }> {
+  try {
+    const r = await fetch(`${getApiUrl()}/api/sessions/${id}/pairing-code`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ phone }),
+    })
+    const data = await r.json().catch(() => ({}))
+    return { ok: r.ok && data.ok, code: data.code, error: data.error }
+  } catch {
+    return { ok: false, error: 'Backend offline.' }
+  }
+}
+
 export async function reconnectSession(id: string): Promise<void> {
   try {
     await fetch(`${getApiUrl()}/api/sessions/${id}/reconnect`, {

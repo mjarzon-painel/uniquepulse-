@@ -575,6 +575,23 @@ app.post('/api/sessions/:id/logout', async (req, res) => {
   await destroySession(req.params.id)
   res.json({ ok: true })
 })
+// Código de pareamento (conectar por número de telefone, alternativa ao QR)
+app.post('/api/sessions/:id/pairing-code', async (req, res) => {
+  const s = sessions.get(req.params.id)
+  if (!s) return res.status(404).json({ ok: false, error: 'Chip não encontrado.' })
+  const phone = digits(req.body?.phone || '')
+  if (phone.length < 12)
+    return res.status(400).json({ ok: false, error: 'Use o número completo com DDI: 55 + DDD + número (ex: 5519998887777).' })
+  try {
+    const code = await s.client.requestPairingCode(phone)
+    console.log(`[wa:${s.id}] código de pareamento gerado.`)
+    res.json({ ok: true, code })
+  } catch (e) {
+    console.error(`[wa:${s.id}] erro pairing code:`, e?.message)
+    res.status(500).json({ ok: false, error: e?.message || 'Falha ao gerar código (tente novamente em alguns segundos, com o QR já aberto).' })
+  }
+})
+
 app.post('/api/sessions/:id/reconnect', async (req, res) => {
   const s = sessions.get(req.params.id)
   if (!s) return res.status(404).json({ ok: false })
