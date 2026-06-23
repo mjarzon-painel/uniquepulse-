@@ -27,12 +27,23 @@ let tmplTimer: ReturnType<typeof setTimeout> | undefined
 let setTimer: ReturnType<typeof setTimeout> | undefined
 let lastTmplId = 0
 
+export interface ApiConfig {
+  token: string
+  phoneId: string
+  waba: string
+  template: string
+  lang: string
+  imageUrl: string
+}
+
 /** Estado compartilhado vindo do backend. */
 interface AppStatePayload {
   contacts: Contact[]
   templates: Template[]
   settings: Settings
   dispatchChips: string[]
+  sendMode: 'chip' | 'api'
+  api: ApiConfig
   dispatch: DispatchState
   queue: string[]
   queuePos: number
@@ -59,6 +70,8 @@ interface State extends AppStatePayload {
 
   setPage: (p: Page) => void
   toggleDispatchChip: (id: string) => void
+  setSendMode: (mode: 'chip' | 'api') => void
+  updateApi: (patch: Partial<ApiConfig>) => void
   importContacts: (rows: { nome: string; telefone: string }[]) => number
   addContact: (nome: string, telefone: string) => boolean
   toggleSelect: (id: string) => void
@@ -82,6 +95,8 @@ export const useStore = create<State>()(
       templates: DEFAULT_TEMPLATES,
       settings: { intervalMin: 8, intervalMax: 15, businessHours: false, order: 'sequential' },
       dispatchChips: [],
+      sendMode: 'chip',
+      api: { token: '', phoneId: '', waba: '', template: '', lang: 'pt_BR', imageUrl: '' },
       dispatch: 'stopped',
       queue: [],
       queuePos: 0,
@@ -112,6 +127,8 @@ export const useStore = create<State>()(
         const patch: Partial<State> = {
           contacts: s.contacts,
           dispatchChips: s.dispatchChips,
+          sendMode: s.sendMode,
+          api: s.api,
           dispatch: s.dispatch,
           queue: s.queue,
           queuePos: s.queuePos,
@@ -135,6 +152,8 @@ export const useStore = create<State>()(
       setPage: (p) => set({ page: p }),
 
       toggleDispatchChip: (id) => sendAction('toggleDispatchChip', { id }),
+      setSendMode: (mode) => sendAction('setSendMode', { mode }),
+      updateApi: (patch) => sendAction('updateApi', { patch }),
 
       importContacts: (rows) => {
         // Conta quantos serão realmente adicionados (válidos e não duplicados), para a mensagem.

@@ -38,6 +38,8 @@ function CountdownRing({ progress, mm, ss }: { progress: number; mm: string; ss:
 
 export default function Disparo() {
   const connected = useStore((s) => s.connected)
+  const sendMode = useStore((s) => s.sendMode)
+  const api = useStore((s) => s.api)
   const sessions = useStore((s) => s.sessions)
   const dispatchChips = useStore((s) => s.dispatchChips)
   const toggleDispatchChip = useStore((s) => s.toggleDispatchChip)
@@ -61,6 +63,9 @@ export default function Disparo() {
     (c) => dispatchChips.length === 0 || dispatchChips.includes(c.id),
   )
   const nextChip = pool.length ? pool[chipCursor % pool.length] : null
+
+  const apiReady = !!(api.phoneId && api.template) && (api.token === '__SET__' || !!api.token)
+  const canDispatch = sendMode === 'api' ? apiReady : connected
 
   const [, force] = useState(0)
   useEffect(() => {
@@ -90,13 +95,26 @@ export default function Disparo() {
         <p className="text-sm text-ink/60">Configure e controle o envio automático em rodízio.</p>
       </div>
 
-      {!connected && (
+      {!canDispatch && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          ⚠️ Nenhum chip conectado. Vá em <b>Conexões</b> para conectar ao menos um WhatsApp.
+          {sendMode === 'api'
+            ? '⚠️ API Oficial não configurada. Vá em Conexões → Modo de envio → API Oficial e preencha token, Phone Number ID e template.'
+            : '⚠️ Nenhum chip conectado. Vá em Conexões para conectar ao menos um WhatsApp.'}
         </div>
       )}
 
-      {/* Chip selection (round-robin pool) */}
+      {sendMode === 'api' && (
+        <div className="rounded-card border border-accent/30 bg-accent/5 p-4 text-sm">
+          <p className="font-semibold text-accent">☁️ Modo API Oficial</p>
+          <p className="mt-1 text-ink/70">
+            Enviando pelo template <b>{api.template || '—'}</b> {apiReady ? '✓ configurado' : '(faltam dados em Conexões)'}.
+            Sem rodízio de chips — todos os envios saem pelo número da API.
+          </p>
+        </div>
+      )}
+
+      {/* Chip selection (round-robin pool) — só no modo chip */}
+      {sendMode === 'chip' && (
       <div className="rounded-card border border-border bg-card p-5">
         <div className="mb-1 flex items-center justify-between">
           <h3 className="font-semibold">Chips no revezamento (round-robin)</h3>
@@ -138,6 +156,7 @@ export default function Disparo() {
           </div>
         )}
       </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Settings */}
@@ -271,21 +290,21 @@ export default function Disparo() {
           {/* Controls */}
           <div className="flex gap-3 pt-1">
             <button
-              disabled={!connected || dispatch === 'running'}
+              disabled={!canDispatch || dispatch === 'running'}
               onClick={start}
               className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-bold text-black transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Play size={16} /> {dispatch === 'paused' ? 'Retomar' : 'Iniciar'}
             </button>
             <button
-              disabled={!connected || dispatch !== 'running'}
+              disabled={dispatch !== 'running'}
               onClick={pause}
               className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-bold text-black transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Pause size={16} /> Pausar
             </button>
             <button
-              disabled={!connected || dispatch === 'stopped'}
+              disabled={dispatch === 'stopped'}
               onClick={stop}
               className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-3 text-sm font-bold text-white transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
             >

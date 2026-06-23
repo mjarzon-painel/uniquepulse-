@@ -109,6 +109,8 @@ function defaultState() {
     templates: DEFAULT_TEMPLATES,
     settings: { intervalMin: 8, intervalMax: 15, businessHours: false, order: 'sequential' },
     dispatchChips: [],
+    sendMode: 'chip', // 'chip' (whatsapp-web.js) | 'api' (Cloud API oficial)
+    api: { token: '', phoneId: '', waba: '', template: '', lang: 'pt_BR', imageUrl: '' },
     dispatch: 'stopped',
     queue: [],
     queuePos: 0,
@@ -161,8 +163,13 @@ function saveState() {
     }
   }, 500)
 }
+// Não expõe o token da API no broadcast (só indica se está configurado).
+function publicAppState() {
+  const a = appState.api || {}
+  return { ...appState, api: { ...a, token: a.token ? '__SET__' : '' } }
+}
 function broadcastApp() {
-  io.emit('app-state', appState)
+  io.emit('app-state', publicAppState())
   saveState()
 }
 function pushLog(line) {
@@ -338,6 +345,29 @@ async function sendToChip(chip, phone, message, imageBase64, caption) {
   }
 }
 
+// Envio pela Cloud API oficial da Meta (template aprovado).
+async function sendViaCloudApi(phone) {
+  const { token, phoneId, template, lang, imageUrl } = appState.api || {}
+  const components = []
+  if (imageUrl) {
+    components.push({ type: 'header', parameters: [{ type: 'image', image: { link: imageUrl } }] })
+  }
+  const payload = {
+    messaging_product: 'whatsapp',
+    to: digits(phone),
+    type: 'template',
+    template: { name: template, language: { code: lang || 'pt_BR' }, components },
+  }
+  const r = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok || data.error) throw new Error(data.error?.message || `HTTP ${r.status}`)
+  return data
+}
+
 // ===================== Motor de disparo (no servidor) =====================
 let sendingLock = false
 
@@ -358,31 +388,54 @@ async function processNext() {
     broadcastApp()
     return
   }
-  const pool = dispatchPool()
-  if (!pool.length) {
-    s.dispatch = 'paused'
-    s.nextSendAt = null
-    pushLog({ kind: 'error', text: '⚠️ Nenhum chip conectado/habilitado — disparo pausado.' })
-    broadcastApp()
-    return
+  const apiMode = s.sendMode === 'api'
+  let chip = null
+  let tIdx = 0
+
+  if (apiMode) {
+    if (!s.api?.token || !s.api?.phoneId || !s.api?.template) {
+      s.dispatch = 'paused'
+      s.nextSendAt = null
+      pushLog({ kind: 'error', text: '⚠️ API Oficial não configurada (token/número/template) — disparo pausado.' })
+      broadcastApp()
+      return
+    }
+  } else {
+    const pool = dispatchPool()
+    if (!pool.length) {
+      s.dispatch = 'paused'
+      s.nextSendAt = null
+      pushLog({ kind: 'error', text: '⚠️ Nenhum chip conectado/habilitado — disparo pausado.' })
+      broadcastApp()
+      return
+    }
+    chip = pool[s.chipCursor % pool.length]
+    s.chipCursor++
+    tIdx = templateForPosition(s.queuePos, s.templates)
   }
-  const chip = pool[s.chipCursor % pool.length]
-  s.chipCursor++
-  const tIdx = templateForPosition(s.queuePos, s.templates)
-  const tmpl = s.templates.find((t) => t.id === tIdx) ?? s.templates[0]
-  const msg = personalize(tmpl.text, contact.nome)
-  const caption = personalize(tmpl.caption, contact.nome)
+
+  const chipName = apiMode ? 'API Oficial' : chip.name
 
   sendingLock = true
   s.sending = true
   s.nextSendAt = null
-  pushLog({ kind: 'info', text: `📤 Enviando Template ${tIdx + 1} via 📱${chip.name} → ${contact.nome} (${contact.telefone})…` })
+  pushLog({
+    kind: 'info',
+    text: apiMode
+      ? `📤 Enviando (API Oficial) → ${contact.nome} (${contact.telefone})…`
+      : `📤 Enviando Template ${tIdx + 1} via 📱${chipName} → ${contact.nome} (${contact.telefone})…`,
+  })
   broadcastApp()
 
   let ok = false
   let err = ''
   try {
-    await sendToChip(chip, contact.telefone, msg, tmpl.image, caption)
+    if (apiMode) {
+      await sendViaCloudApi(contact.telefone)
+    } else {
+      const tmpl = s.templates.find((t) => t.id === tIdx) ?? s.templates[0]
+      await sendToChip(chip, contact.telefone, personalize(tmpl.text, contact.nome), tmpl.image, '')
+    }
     ok = true
   } catch (e) {
     err = e?.message || 'erro'
@@ -391,11 +444,11 @@ async function processNext() {
   contact.status = ok ? 'sent' : 'error'
   contact.templateUsed = tIdx
   s.history = [
-    { id: uid(), datetime: nowDateTime(), ts: Date.now(), nome: contact.nome, telefone: contact.telefone, template: tIdx, status: ok ? 'sent' : 'error', preview: msg.slice(0, 120), chip: chip.name },
+    { id: uid(), datetime: nowDateTime(), ts: Date.now(), nome: contact.nome, telefone: contact.telefone, template: tIdx, status: ok ? 'sent' : 'error', preview: apiMode ? `(API) ${s.api.template}` : personalize((s.templates.find((t) => t.id === tIdx) ?? s.templates[0]).text, contact.nome).slice(0, 120), chip: chipName },
     ...s.history,
   ].slice(0, 2000)
-  if (ok) pushLog({ kind: 'success', text: `✅ Template ${tIdx + 1} via 📱${chip.name} → ${contact.nome} (${contact.telefone})` })
-  else pushLog({ kind: 'error', text: `❌ Falha via 📱${chip.name} → ${contact.nome} — ${err}` })
+  if (ok) pushLog({ kind: 'success', text: `✅ ${apiMode ? 'API Oficial' : 'Template ' + (tIdx + 1) + ' via 📱' + chipName} → ${contact.nome} (${contact.telefone})` })
+  else pushLog({ kind: 'error', text: `❌ Falha (${chipName}) → ${contact.nome} — ${err}` })
 
   const nextPos = s.queuePos + 1
   const finished = nextPos >= s.queue.length
@@ -508,6 +561,24 @@ function handleAction(type, payload = {}) {
     case 'updateSettings':
       s.settings = { ...s.settings, ...payload.patch }
       break
+    case 'setSendMode':
+      if (payload.mode === 'api' || payload.mode === 'chip') s.sendMode = payload.mode
+      break
+    case 'updateApi': {
+      const p = payload.patch || {}
+      const cur = s.api || {}
+      // Mantém o token atual se vier vazio ou o marcador '__SET__'.
+      const token = p.token === undefined || p.token === '' || p.token === '__SET__' ? cur.token : p.token
+      s.api = {
+        token,
+        phoneId: p.phoneId ?? cur.phoneId ?? '',
+        waba: p.waba ?? cur.waba ?? '',
+        template: p.template ?? cur.template ?? '',
+        lang: p.lang ?? cur.lang ?? 'pt_BR',
+        imageUrl: p.imageUrl ?? cur.imageUrl ?? '',
+      }
+      break
+    }
     case 'toggleDispatchChip': {
       const cur = s.dispatchChips || []
       s.dispatchChips = cur.includes(payload.id) ? cur.filter((x) => x !== payload.id) : [...cur, payload.id]
@@ -550,7 +621,7 @@ function handleAction(type, payload = {}) {
 // ===================== Socket =====================
 io.on('connection', (socket) => {
   socket.emit('sessions', publicSessions())
-  socket.emit('app-state', appState)
+  socket.emit('app-state', publicAppState())
   socket.on('action', (msg) => {
     try {
       handleAction(msg?.type, msg?.payload || {})
@@ -561,7 +632,7 @@ io.on('connection', (socket) => {
 })
 
 // ===================== REST =====================
-app.get('/api/state', (_req, res) => res.json(appState))
+app.get('/api/state', (_req, res) => res.json(publicAppState()))
 app.get('/api/sessions', (_req, res) => res.json(publicSessions()))
 
 app.post('/api/sessions', (req, res) => {
