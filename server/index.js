@@ -4,6 +4,7 @@ import cors from 'cors'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import crypto from 'crypto'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import qrcode from 'qrcode'
@@ -25,9 +26,14 @@ const STATE_FILE = path.join(DATA_DIR, 'app-state.json')
 // Chave de acesso. Defina WA_TOKEN ao expor o backend na internet.
 const TOKEN = process.env.WA_TOKEN || ''
 
+// Webhook da Cloud API (respostas recebidas). VERIFY_TOKEN é o que você digita no painel da Meta
+// ao cadastrar o webhook. META_APP_SECRET (opcional) valida a assinatura das requisições.
+const WEBHOOK_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || 'uniquepulse-webhook'
+const APP_SECRET = process.env.META_APP_SECRET || ''
+
 const app = express()
 app.use(cors())
-app.use(express.json({ limit: '20mb' }))
+app.use(express.json({ limit: '20mb', verify: (req, _res, buf) => { req.rawBody = buf } }))
 
 app.use('/api', (req, res, next) => {
   if (!TOKEN) return next()
@@ -121,6 +127,7 @@ function defaultState() {
     log: [],
     history: [],
     showCompletion: false,
+    replies: [], // respostas recebidas via webhook (Cloud API)
   }
 }
 
@@ -612,6 +619,12 @@ function handleAction(type, payload = {}) {
     case 'closeCompletion':
       s.showCompletion = false
       break
+    case 'clearReplies':
+      s.replies = []
+      break
+    case 'markReplyHandled':
+      s.replies = (s.replies || []).map((r) => (r.id === payload.id ? { ...r, handled: !r.handled } : r))
+      break
     default:
       return
   }
@@ -672,6 +685,84 @@ app.post('/api/sessions/:id/reconnect', async (req, res) => {
   sessions.delete(id)
   createSession(id, name)
   res.json({ ok: true })
+})
+
+// ===================== Webhook (respostas da Cloud API) =====================
+// Valida a assinatura X-Hub-Signature-256 (só se META_APP_SECRET estiver definido).
+function validSignature(req) {
+  if (!APP_SECRET) return true // sem secret configurado, não exige assinatura
+  const sig = req.headers['x-hub-signature-256']
+  if (!sig || !req.rawBody) return false
+  const expected = 'sha256=' + crypto.createHmac('sha256', APP_SECRET).update(req.rawBody).digest('hex')
+  try {
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+  } catch {
+    return false
+  }
+}
+// Extrai o dia (26/27/28) do texto do botão/resposta, se houver.
+function dayFromText(t) {
+  const m = (t || '').match(/\b(26|27|28)\b/)
+  return m ? m[1] : null
+}
+function pushReply(r) {
+  if (r.msgId && (appState.replies || []).some((x) => x.msgId === r.msgId)) return // dedup (Meta reenvia)
+  appState.replies = [{ id: uid(), handled: false, ...r }, ...(appState.replies || [])].slice(0, 2000)
+}
+
+// Verificação do webhook (a Meta chama por GET ao cadastrar).
+app.get('/webhook', (req, res) => {
+  const mode = req.query['hub.mode']
+  const token = req.query['hub.verify_token']
+  const challenge = req.query['hub.challenge']
+  if (mode === 'subscribe' && token === WEBHOOK_VERIFY_TOKEN) {
+    console.log('[webhook] verificado ✓')
+    return res.status(200).send(challenge)
+  }
+  console.warn('[webhook] verificação falhou (token incorreto).')
+  return res.sendStatus(403)
+})
+
+// Recepção de mensagens/cliques de botão.
+app.post('/webhook', (req, res) => {
+  res.sendStatus(200) // responde sempre rápido (a Meta exige < ~5s)
+  if (!validSignature(req)) {
+    console.warn('[webhook] assinatura inválida — ignorado')
+    return
+  }
+  try {
+    let changed = false
+    for (const e of req.body?.entry || []) {
+      for (const ch of e.changes || []) {
+        const v = ch.value || {}
+        const profileName = v.contacts?.[0]?.profile?.name || ''
+        for (const m of v.messages || []) {
+          let text = ''
+          if (m.type === 'text') text = m.text?.body || ''
+          else if (m.type === 'button') text = m.button?.text || m.button?.payload || ''
+          else if (m.type === 'interactive')
+            text = m.interactive?.button_reply?.title || m.interactive?.list_reply?.title || ''
+          else text = `[${m.type}]`
+          pushReply({
+            msgId: m.id,
+            time: nowTime(),
+            datetime: nowDateTime(),
+            ts: Date.now(),
+            from: '+' + digits(m.from),
+            name: profileName,
+            kind: m.type,
+            text,
+            day: dayFromText(text),
+          })
+          console.log(`[webhook] resposta de ${profileName || m.from}: "${text}"`)
+          changed = true
+        }
+      }
+    }
+    if (changed) broadcastApp()
+  } catch (err) {
+    console.error('[webhook] erro ao processar', err?.message)
+  }
 })
 
 // Health monitor
