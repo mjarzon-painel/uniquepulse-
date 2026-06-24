@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { LogIn, Lock, User, AlertCircle } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { BRAND } from '../config'
 
 export default function Login() {
   const login = useStore((s) => s.login)
@@ -21,11 +22,12 @@ export default function Login() {
         style={{ boxShadow: '0 0 60px rgba(233,185,73,0.08)' }}
       >
         <div className="mb-6 flex flex-col items-center text-center">
-          <img src="/logo-full.png" alt="Unique" className="h-28 w-28 object-contain" />
+          <img src={BRAND.logoFull} alt={BRAND.name} className="h-28 w-28 object-contain" />
           <h1 className="mt-2 text-xl font-extrabold tracking-tight">
-            Unique<span className="text-accent">Pulse</span>
+            {BRAND.lead}
+            <span className="text-accent">{BRAND.mark}</span>
           </h1>
-          <p className="text-xs text-ink/50">Disparos WhatsApp — Unique Automóveis</p>
+          <p className="text-xs text-ink/50">{BRAND.tagline}</p>
         </div>
 
         <form onSubmit={submit} className="space-y-3">

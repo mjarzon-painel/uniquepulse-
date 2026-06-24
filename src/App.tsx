@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Contacts from './pages/Contacts'
 import Templates from './pages/Templates'
 import Disparo from './pages/Disparo'
+import Respostas from './pages/Respostas'
 import Historico from './pages/Historico'
 import Conexoes from './pages/Conexoes'
 import Login from './pages/Login'
@@ -51,6 +52,7 @@ export default function App() {
           {page === 'contacts' && <Contacts />}
           {page === 'templates' && <Templates />}
           {page === 'disparo' && <Disparo />}
+          {page === 'respostas' && <Respostas />}
           {page === 'historico' && <Historico />}
           {page === 'conexoes' && <Conexoes />}
         </main>

@@ -45,4 +45,25 @@ export interface HistoryEntry {
   chip?: string // nome do chip que enviou
 }
 
-export type Page = 'dashboard' | 'contacts' | 'templates' | 'disparo' | 'historico' | 'conexoes'
+export interface Reply {
+  id: string
+  msgId?: string
+  time: string // HH:MM:SS
+  datetime: string
+  ts: number
+  from: string // telefone +55...
+  name: string // nome do perfil WhatsApp
+  kind: string // text | button | interactive | ...
+  text: string
+  day: string | null // '26' | '27' | '28' quando identificado
+  handled: boolean // marcado como tratado/atendido
+}
+
+export type Page =
+  | 'dashboard'
+  | 'contacts'
+  | 'templates'
+  | 'disparo'
+  | 'respostas'
+  | 'historico'
+  | 'conexoes'

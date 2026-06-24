@@ -6,6 +6,7 @@ import type {
   HistoryEntry,
   LogLine,
   Page,
+  Reply,
   Settings,
   Template,
 } from '../types'
@@ -54,6 +55,7 @@ interface AppStatePayload {
   log: LogLine[]
   history: HistoryEntry[]
   showCompletion: boolean
+  replies: Reply[]
 }
 
 interface State extends AppStatePayload {
@@ -85,6 +87,8 @@ interface State extends AppStatePayload {
   stop: () => void
   resetCampaign: () => void
   closeCompletion: () => void
+  clearReplies: () => void
+  markReplyHandled: (id: string) => void
 }
 
 export const useStore = create<State>()(
@@ -107,6 +111,7 @@ export const useStore = create<State>()(
       log: [],
       history: [],
       showCompletion: false,
+      replies: [],
 
       // ---- local ----
       authed: false,
@@ -139,6 +144,7 @@ export const useStore = create<State>()(
           log: s.log,
           history: s.history,
           showCompletion: s.showCompletion,
+          replies: s.replies || [], // backend antigo pode não enviar — evita quebrar a aba Respostas
         }
         // Não sobrescreve edições locais pendentes de template/settings.
         if (!pendingTemplate) patch.templates = s.templates
@@ -220,6 +226,8 @@ export const useStore = create<State>()(
       stop: () => sendAction('stop'),
       resetCampaign: () => sendAction('resetCampaign'),
       closeCompletion: () => sendAction('closeCompletion'),
+      clearReplies: () => sendAction('clearReplies'),
+      markReplyHandled: (id) => sendAction('markReplyHandled', { id }),
     }),
     {
       name: 'wa-blast-store',

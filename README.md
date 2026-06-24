@@ -56,7 +56,8 @@ whatsapp-blast-manager/
 │   │   ├── api.ts           # socket.io + REST (getApiUrl=VITE_API_URL, sendAction, etc.)
 │   │   ├── helpers.ts       # validação telefone, intervalo, rodízio template
 │   │   └── parseContacts.ts # importação inteligente (CSV/XLSX/PDF/DOCX/TXT/VCF)
-│   ├── pages/               # Dashboard, Contacts, Templates, Disparo, Historico, Conexoes, Login
+│   ├── pages/               # Dashboard, Contacts, Templates, Disparo, Respostas, Historico, Conexoes, Login
+│   ├── config.ts            # login + marca (parametrizável por VITE_* p/ multi-empresa)
 │   ├── components/          # Header, Sidebar, ConnectModal, CompletionModal, WhatsAppBubble, ErrorBoundary
 │   ├── config.ts            # credenciais de login do painel
 │   └── types.ts
@@ -105,15 +106,20 @@ powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\uniquepulse\start-vps
 - Disparo **reveza entre os chips** (round-robin) + **intervalo variável** (anti-ban).
 - ⚠️ Não-oficial → risco de ban. Por isso o intervalo variável e horário comercial.
 
-### Modo API (WhatsApp Cloud API oficial) — **em configuração** 🚧
+### Modo API (WhatsApp Cloud API oficial) — **funcionando** ✅
 - Config em Conexões → "API Oficial" (token, Phone Number ID, template, idioma, URL imagem).
 - Token guardado **só no servidor** (não trafega no broadcast; aparece como `__SET__`).
-- Envia **template aprovado** pela Meta. Sem risco de ban, mas:
-  - precisa de **número real registrado** (o de teste só manda p/ 5 destinatários);
-  - precisa de **template aprovado** + tem **custo por mensagem**.
+- Envia **template aprovado** pela Meta. Sem risco de ban (tem custo por mensagem).
+- **Respostas** (texto + cliques de botão) chegam via **webhook** (`/webhook`) e aparecem
+  na aba **Respostas** do painel, ao vivo, com contagem por dia.
 
-**IDs da API (Unique):** WABA `1346266337714332` · Phone Number ID (TESTE) `1221831344344055`
+**IDs da API (Unique — produção):** WABA `2525170417942471` · Phone Number ID `1196730566852814`
 · imagem do template: `https://uniquepulse.onrender.com/feirao.jpg`
+
+## 🏢 Replicar para outra empresa
+Veja **[DEPLOY-NOVA-EMPRESA.md](DEPLOY-NOVA-EMPRESA.md)** — passo a passo completo (Meta +
+deploy + webhook + painel). A marca/login são parametrizáveis por variáveis `VITE_*`
+(ver `.env.example`), sem tocar no código.
 
 ---
 

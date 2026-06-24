@@ -1,5 +1,6 @@
 import { Smartphone, WifiOff, LogOut, Menu } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { BRAND } from '../config'
 
 export default function Header({ onMenu }: { onMenu: () => void }) {
   const sessions = useStore((s) => s.sessions)
@@ -17,12 +18,13 @@ export default function Header({ onMenu }: { onMenu: () => void }) {
         >
           <Menu size={22} />
         </button>
-        <img src="/logo-icon.png" alt="Unique" className="h-9 w-9 shrink-0 object-contain sm:h-10 sm:w-10" />
+        <img src={BRAND.logoIcon} alt={BRAND.name} className="h-9 w-9 shrink-0 object-contain sm:h-10 sm:w-10" />
         <div className="min-w-0">
           <h1 className="truncate text-base font-extrabold leading-none tracking-tight">
-            Unique<span className="text-accent">Pulse</span>
+            {BRAND.lead}
+            <span className="text-accent">{BRAND.mark}</span>
           </h1>
-          <p className="hidden text-[10px] text-ink/50 sm:block">Disparos WhatsApp — Unique Automóveis</p>
+          <p className="hidden text-[10px] text-ink/50 sm:block">{BRAND.tagline}</p>
         </div>
       </div>
 

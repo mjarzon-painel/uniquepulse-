@@ -1,7 +1,8 @@
-import { LayoutDashboard, Users, FileText, Send, History, Smartphone, X } from 'lucide-react'
+import { LayoutDashboard, Users, FileText, Send, History, Smartphone, MessageSquare, X } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import type { Page } from '../types'
 import { isFilled } from '../utils/helpers'
+import { BRAND } from '../config'
 
 const ITEMS: { id: Page; label: string; icon: typeof Users }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -9,6 +10,7 @@ const ITEMS: { id: Page; label: string; icon: typeof Users }[] = [
   { id: 'contacts', label: 'Contatos', icon: Users },
   { id: 'templates', label: 'Templates', icon: FileText },
   { id: 'disparo', label: 'Disparo', icon: Send },
+  { id: 'respostas', label: 'Respostas', icon: MessageSquare },
   { id: 'historico', label: 'Histórico', icon: History },
 ]
 
@@ -18,9 +20,11 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   const templates = useStore((s) => s.templates)
   const contacts = useStore((s) => s.contacts)
   const sessions = useStore((s) => s.sessions)
+  const replies = useStore((s) => s.replies)
 
   const filledCount = templates.filter(isFilled).length
   const connectedChips = sessions.filter((s) => s.status === 'connected').length
+  const pendingReplies = replies.filter((r) => !r.handled).length
 
   const nav = (
     <>
@@ -64,6 +68,11 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                   {connectedChips} 📱
                 </span>
               )}
+              {id === 'respostas' && pendingReplies > 0 && (
+                <span className="rounded-full bg-accent/20 px-1.5 py-0.5 text-[10px] font-bold text-accent">
+                  {pendingReplies}
+                </span>
+              )}
             </button>
           )
         })}
@@ -91,7 +100,8 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
           <aside className="absolute left-0 top-0 flex h-full w-64 max-w-[80%] flex-col border-r border-border bg-card p-3 shadow-2xl">
             <div className="mb-2 flex items-center justify-between px-1">
               <span className="text-sm font-bold">
-                Unique<span className="text-accent">Pulse</span>
+                {BRAND.lead}
+                <span className="text-accent">{BRAND.mark}</span>
               </span>
               <button onClick={onClose} className="text-ink/50 hover:text-ink">
                 <X size={20} />
