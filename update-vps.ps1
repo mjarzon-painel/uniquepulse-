@@ -1,5 +1,5 @@
 # UniquePulse — atualiza o backend no VPS SEM trocar a URL do tunel
-# (reinicia so o node; mantem o cloudflared rodando, entao a URL publica continua a mesma)
+# (reinicia so o node; o ngrok de dominio fixo NAO e tocado, entao a URL publica continua a mesma)
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:USERPROFILE 'uniquepulse'
 
@@ -27,11 +27,8 @@ Set-Location "$root\app"
 Write-Host '== Iniciando backend novo ==' -ForegroundColor Cyan
 Start-Process "$root\node\node.exe" -ArgumentList 'server/index.js' -WorkingDirectory "$root\app" -WindowStyle Hidden
 
-# Garante o tunel rodando (se ja estiver, NAO mexe -> URL continua a mesma)
-if (-not (Get-Process cloudflared -ErrorAction SilentlyContinue)) {
-  Start-Process "$root\cloudflared.exe" -ArgumentList "tunnel --url http://localhost:3001 --no-autoupdate --logfile `"$root\tunnel.log`"" -WindowStyle Hidden
-  Write-Host '(tunel reiniciado — a URL pode ter mudado; rode: Get-Content "$root\tunnel.log" | Select-String trycloudflare)' -ForegroundColor Yellow
-}
+# NAO mexe no tunel: o ngrok (dominio fixo swung-dig-chastity.ngrok-free.dev) e gerenciado
+# pelo start-vps.ps1 / tarefa agendada. Como so reiniciamos o 'node', a URL publica continua a mesma.
 
 Write-Host ''
 Write-Host '==================================================' -ForegroundColor Green
