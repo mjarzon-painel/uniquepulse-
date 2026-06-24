@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { MessageSquare, Check, Trash2, Download, ExternalLink, Filter } from 'lucide-react'
+import { MessageSquare, Check, Trash2, Download, ExternalLink, Filter, Phone } from 'lucide-react'
 import { useStore } from '../store/useStore'
 
 const DAY_COLORS: Record<string, string> = {
@@ -157,18 +157,29 @@ export default function Respostas() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{r.name || r.from}</span>
-                  {r.day && (
+                  {r.day ? (
                     <span
                       className="rounded px-2 py-0.5 text-[11px] font-bold text-white"
                       style={{ background: DAY_COLORS[r.day] }}
                     >
-                      Vou dia {r.day}
+                      📅 Vai dia {r.day}/06
+                    </span>
+                  ) : (
+                    <span className="rounded bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-ink/60">
+                      sem dia definido
                     </span>
                   )}
                   <span className="text-xs text-ink/40">{r.datetime}</span>
                 </div>
-                <p className="mt-0.5 break-words text-sm text-ink/80">{r.text}</p>
-                <div className="mt-1 text-xs text-ink/50">{r.from}</div>
+                <a
+                  href={waLink(r.from)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline"
+                >
+                  <Phone size={13} /> {r.from}
+                </a>
+                <p className="mt-0.5 break-words text-sm text-ink/70">“{r.text}”</p>
               </div>
 
               <a
